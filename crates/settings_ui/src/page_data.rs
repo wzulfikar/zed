@@ -5705,6 +5705,28 @@ pub(crate) fn settings_data(cx: &App) -> Vec<SettingsPage> {
                     metadata: None,
                     files: USER,
                 }),
+                SettingsPageItem::SettingItem(SettingItem {
+                    title: "Max Recent History Items",
+                    description: "Maximum number of recent history items to display in agent panel.",
+                    field: Box::new(SettingField {
+                        json_path: Some("agent.max_recent_history_items"),
+                        pick: |settings_content| {
+                            settings_content
+                                .agent
+                                .as_ref()?
+                                .max_recent_history_items
+                                .as_ref()
+                        },
+                        write: |settings_content, value| {
+                            settings_content
+                                .agent
+                                .get_or_insert_default()
+                                .max_recent_history_items = value;
+                        },
+                    }),
+                    metadata: None,
+                    files: USER,
+                }),
             ],
         },
         SettingsPage {
