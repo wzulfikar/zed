@@ -837,6 +837,7 @@ pub enum AcpThreadEvent {
     Refusal,
     AvailableCommandsUpdated(Vec<acp::AvailableCommand>),
     ModeUpdated(acp::SessionModeId),
+    CleanupDetachedSendTask,
 }
 
 impl EventEmitter<AcpThreadEvent> for AcpThread {}
