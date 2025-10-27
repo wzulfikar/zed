@@ -3113,8 +3113,8 @@ impl AcpThreadView {
         v_flex()
             .size_full()
             .when(render_history, |this| {
-                let recent_history: Vec<_> = self.history_store.update(cx, |history_store, _| {
-                    history_store.entries().take(3).collect()
+                let recent_history: Vec<_> = self.history_store.update(cx, |history_store, cx| {
+                    history_store.entries().take(AgentSettings::get_global(cx).max_recent_history_items).collect()
                 });
                 this.justify_end().child(
                     v_flex()

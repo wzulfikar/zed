@@ -107,6 +107,10 @@ pub struct AgentSettingsContent {
     ///
     /// Default: 4
     pub message_editor_min_lines: Option<usize>,
+    /// Maximum number of items to show in recent history.
+    ///
+    /// Default: 3
+    pub max_recent_history_items: Option<usize>,
 }
 
 impl AgentSettingsContent {
