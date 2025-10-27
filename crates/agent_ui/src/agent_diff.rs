@@ -1358,7 +1358,8 @@ impl AgentDiff {
             | AcpThreadEvent::PromptCapabilitiesUpdated
             | AcpThreadEvent::AvailableCommandsUpdated(_)
             | AcpThreadEvent::Retry(_)
-            | AcpThreadEvent::ModeUpdated(_) => {}
+            | AcpThreadEvent::ModeUpdated(_)
+            | AcpThreadEvent::CleanupDetachedSendTask => {}
         }
     }
 
