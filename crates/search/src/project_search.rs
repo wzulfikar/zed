@@ -177,6 +177,8 @@ fn contains_uppercase(str: &str) -> bool {
     str.chars().any(|c| c.is_uppercase())
 }
 
+const SEARCH_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(500);
+
 pub struct ProjectSearch {
     project: Entity<Project>,
     excerpts: Entity<MultiBuffer>,
@@ -377,6 +379,22 @@ impl ProjectSearch {
             None
         }));
         cx.notify();
+    }
+
+    fn debounced_search(&mut self, query: String, cx: &mut Context<Self>) {
+        self.pending_search.take();
+        let query_clone = query.clone();
+        self.pending_search = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(SEARCH_DEBOUNCE).await;
+            this.update(cx, |this, cx| {
+                println!("query: {}", query_clone);
+                // this.search(query, cx); // Uncomment when ready to do the actual search
+                // this.pending_search = None;
+                // cx.notify();
+            })
+            .ok()?;
+            None
+        }));
     }
 }
 
@@ -790,16 +808,19 @@ impl ProjectSearchView {
         // Subscribe to query_editor in order to reraise editor events for workspace item activation purposes
         subscriptions.push(
             cx.subscribe(&query_editor, |this, _, event: &EditorEvent, cx| {
-                if let EditorEvent::Edited { .. } = event
-                    && EditorSettings::get_global(cx).use_smartcase_search
-                {
+                if let EditorEvent::Edited { .. } = event {
                     let query = this.search_query_text(cx);
-                    if !query.is_empty()
-                        && this.search_options.contains(SearchOptions::CASE_SENSITIVE)
-                            != contains_uppercase(&query)
-                    {
-                        this.toggle_search_option(SearchOptions::CASE_SENSITIVE, cx);
+                    if EditorSettings::get_global(cx).use_smartcase_search {
+                        if !query.is_empty()
+                            && this.search_options.contains(SearchOptions::CASE_SENSITIVE)
+                                != contains_uppercase(&query)
+                        {
+                            this.toggle_search_option(SearchOptions::CASE_SENSITIVE, cx);
+                        }
                     }
+                    this.entity.update(cx, |entity, cx| {
+                        entity.debounced_search(query.to_string(), cx);
+                    });
                 }
                 cx.emit(ViewEvent::EditorEvent(event.clone()))
             }),
@@ -1423,9 +1444,6 @@ impl ProjectSearchView {
                     cx,
                 );
             });
-            if is_new_search && self.query_editor.focus_handle(cx).is_focused(window) {
-                self.focus_results_editor(window, cx);
-            }
         }
 
         cx.emit(ViewEvent::UpdateTab);
