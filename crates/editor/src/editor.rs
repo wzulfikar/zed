@@ -2501,11 +2501,17 @@ impl Editor {
 
         let disjoint = self.selections.disjoint_anchors();
         let snapshot = self.snapshot(window, cx);
-        let snapshot = snapshot.buffer_snapshot();
+        let buffer_snapshot = snapshot.buffer_snapshot();
+
+        let display_snapshot = self.display_snapshot(cx);
+        if self.has_non_empty_selection(&display_snapshot) {
+            key_context.add("selection");
+        }
+
         if self.mode == EditorMode::SingleLine
             && let [selection] = disjoint
             && selection.start == selection.end
-            && selection.end.to_offset(snapshot) == snapshot.len()
+            && selection.end.to_offset(&buffer_snapshot) == buffer_snapshot.len()
         {
             key_context.add("end_of_input");
         }
