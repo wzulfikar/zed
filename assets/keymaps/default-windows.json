@@ -614,7 +614,7 @@
       "ctrl-alt-b": "workspace::ToggleRightDock",
       "ctrl-b": "workspace::ToggleLeftDock",
       "ctrl-j": "workspace::ToggleBottomDock",
-      "ctrl-shift-y": "workspace::CloseAllDocks",
+      "ctrl-shift-y": "workspace::ToggleAllDocks",
       "alt-r": "workspace::ResetActiveDockSize",
       // For 0px parameter, uses UI font size value.
       "shift-alt--": ["workspace::DecreaseActiveDockSize", { "px": 0 }],
@@ -1326,6 +1326,13 @@
       "enter": "editor::Newline",
       "ctrl-enter up": "dev::Zeta2RatePredictionPositive",
       "ctrl-enter down": "dev::Zeta2RatePredictionNegative"
+    }
+  },
+  {
+    "context": "Zeta2Context > Editor",
+    "bindings": {
+      "alt-left": "dev::Zeta2ContextGoBack",
+      "alt-right": "dev::Zeta2ContextGoForward"
     }
   }
 ]
