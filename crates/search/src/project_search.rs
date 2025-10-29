@@ -288,6 +288,7 @@ impl ProjectSearch {
     }
 
     fn search(&mut self, query: SearchQuery, cx: &mut Context<Self>) {
+        self.pending_search.take();
         let search = self.project.update(cx, |project, cx| {
             project
                 .search_history_mut(SearchInputKind::Query)
