@@ -2395,6 +2395,21 @@ pub(crate) fn settings_data(cx: &App) -> Vec<SettingsPage> {
                     files: USER,
                 }),
                 SettingsPageItem::SettingItem(SettingItem {
+                    title: "Use Instant Search",
+                    description: "Whether to enable instant search (search as you type)",
+                    field: Box::new(SettingField {
+                        json_path: Some("use_instant_search"),
+                        pick: |settings_content| {
+                            settings_content.editor.use_instant_search.as_ref()
+                        },
+                        write: |settings_content, value| {
+                            settings_content.editor.use_instant_search = value;
+                        },
+                    }),
+                    metadata: None,
+                    files: USER,
+                }),
+                SettingsPageItem::SettingItem(SettingItem {
                     title: "Include Ignored",
                     description: "Include ignored files in search results by default.",
                     field: Box::new(SettingField {

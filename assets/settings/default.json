@@ -618,6 +618,10 @@
   // If your search query contains any uppercase letters, the search becomes case-sensitive;
   // if it contains only lowercase letters, the search becomes case-insensitive.
   "use_smartcase_search": false,
+  // When enabled, automatically starts a search as you type a character.
+  // With this mode, the focus will stay in the search field instead of automatically
+  // moved to the results editor.
+  "use_instant_search": true,
   // Inlay hint related settings
   "inlay_hints": {
     // Global switch to toggle hints on and off, switched off by default.

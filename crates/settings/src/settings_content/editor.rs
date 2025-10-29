@@ -107,6 +107,7 @@ pub struct EditorSettingsContent {
     /// Default: always
     pub seed_search_query_from_cursor: Option<SeedQuerySetting>,
     pub use_smartcase_search: Option<bool>,
+    pub use_instant_search: Option<bool>,
     /// Determines the modifier to be used to add multiple cursors with the mouse. The open hover link mouse gestures will adapt such that it do not conflict with the multicursor modifier.
     ///
     /// Default: alt

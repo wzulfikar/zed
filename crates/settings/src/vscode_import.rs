@@ -298,6 +298,7 @@ impl VsCodeSettings {
             snippet_sort_order: None,
             toolbar: None,
             use_smartcase_search: self.read_bool("search.smartCase"),
+            use_instant_search: self.read_bool("search.searchOnType"),
             vertical_scroll_margin: self.read_f32("editor.cursorSurroundingLines"),
         }
     }
