@@ -177,7 +177,7 @@ fn contains_uppercase(str: &str) -> bool {
     str.chars().any(|c| c.is_uppercase())
 }
 
-const SEARCH_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(500);
+const SEARCH_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(400);
 
 pub struct ProjectSearch {
     project: Entity<Project>,
@@ -219,6 +219,7 @@ pub struct ProjectSearchView {
     replace_enabled: bool,
     included_opened_only: bool,
     regex_language: Option<Arc<Language>>,
+    pending_search_debounce: Option<Task<Option<()>>>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -379,22 +380,6 @@ impl ProjectSearch {
             None
         }));
         cx.notify();
-    }
-
-    fn debounced_search(&mut self, query: String, cx: &mut Context<Self>) {
-        self.pending_search.take();
-        let query_clone = query.clone();
-        self.pending_search = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(SEARCH_DEBOUNCE).await;
-            this.update(cx, |this, cx| {
-                println!("query: {}", query_clone);
-                // this.search(query, cx); // Uncomment when ready to do the actual search
-                // this.pending_search = None;
-                // cx.notify();
-            })
-            .ok()?;
-            None
-        }));
     }
 }
 
@@ -818,9 +803,7 @@ impl ProjectSearchView {
                             this.toggle_search_option(SearchOptions::CASE_SENSITIVE, cx);
                         }
                     }
-                    this.entity.update(cx, |entity, cx| {
-                        entity.debounced_search(query.to_string(), cx);
-                    });
+                    this.search_debounce(cx);
                 }
                 cx.emit(ViewEvent::EditorEvent(event.clone()))
             }),
@@ -924,6 +907,7 @@ impl ProjectSearchView {
             replace_enabled: false,
             included_opened_only: false,
             regex_language: None,
+            pending_search_debounce: None,
             _subscriptions: subscriptions,
         };
         this.entity_changed(window, cx);
@@ -1171,6 +1155,25 @@ impl ProjectSearchView {
         if let Some(query) = self.build_search_query(cx, open_buffers) {
             self.entity.update(cx, |model, cx| model.search(query, cx));
         }
+    }
+
+    fn search_debounce(&mut self, cx: &mut Context<Self>) {
+        self.pending_search_debounce.take();
+        self.entity.update(cx, |model, _cx| {
+            model.pending_search.take();
+        });
+
+        let view = cx.entity().downgrade();
+        self.pending_search_debounce = Some(cx.spawn(async move |_, cx| {
+            cx.background_executor().timer(SEARCH_DEBOUNCE).await;
+            if let Some(view) = view.upgrade() {
+                view.update(cx, |this, cx| {
+                    this.search(cx);
+                })
+                .ok();
+            }
+            None
+        }));
     }
 
     pub fn search_query_text(&self, cx: &App) -> String {
