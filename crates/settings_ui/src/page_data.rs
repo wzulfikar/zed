@@ -2396,7 +2396,7 @@ pub(crate) fn settings_data(cx: &App) -> Vec<SettingsPage> {
                 }),
                 SettingsPageItem::SettingItem(SettingItem {
                     title: "Use Instant Search",
-                    description: "Whether to enable instant search (search as you type)",
+                    description: "Whether to enable instant search (search as you type) in project search",
                     field: Box::new(SettingField {
                         json_path: Some("use_instant_search"),
                         pick: |settings_content| {
