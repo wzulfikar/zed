@@ -803,7 +803,7 @@ impl ProjectSearchView {
                             this.toggle_search_option(SearchOptions::CASE_SENSITIVE, cx);
                         }
                     }
-                    this.search_debounce(cx);
+                    // this.search_debounce(cx);
                 }
                 cx.emit(ViewEvent::EditorEvent(event.clone()))
             }),
@@ -1146,32 +1146,26 @@ impl ProjectSearchView {
 
     fn search(&mut self, cx: &mut Context<Self>) {
         let open_buffers = if self.included_opened_only {
+            println!("included_opened_only: true");
             self.workspace
                 .update(cx, |workspace, cx| self.open_buffers(cx, workspace))
                 .ok()
         } else {
+            println!("included_opened_only: false");
             None
         };
+        println!("open_buffers: {:?}", open_buffers);
         if let Some(query) = self.build_search_query(cx, open_buffers) {
+            println!("query: {}", query.as_str());
             self.entity.update(cx, |model, cx| model.search(query, cx));
         }
     }
 
     fn search_debounce(&mut self, cx: &mut Context<Self>) {
         self.pending_search_debounce.take();
-        self.entity.update(cx, |model, _cx| {
-            model.pending_search.take();
-        });
-
-        let view = cx.entity().downgrade();
-        self.pending_search_debounce = Some(cx.spawn(async move |_, cx| {
+        self.pending_search_debounce = Some(cx.spawn(async move |view, cx| {
             cx.background_executor().timer(SEARCH_DEBOUNCE).await;
-            if let Some(view) = view.upgrade() {
-                view.update(cx, |this, cx| {
-                    this.search(cx);
-                })
-                .ok();
-            }
+            view.update(cx, |this, cx| this.search(cx)).ok();
             None
         }));
     }
