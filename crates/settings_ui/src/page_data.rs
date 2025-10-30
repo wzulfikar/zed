@@ -2399,21 +2399,6 @@ pub(crate) fn settings_data(cx: &App) -> Vec<SettingsPage> {
                     files: USER,
                 }),
                 SettingsPageItem::SettingItem(SettingItem {
-                    title: "Use Instant Search",
-                    description: "Whether to enable instant search (search as you type) in project search.",
-                    field: Box::new(SettingField {
-                        json_path: Some("use_instant_search"),
-                        pick: |settings_content| {
-                            settings_content.editor.use_instant_search.as_ref()
-                        },
-                        write: |settings_content, value| {
-                            settings_content.editor.use_instant_search = value;
-                        },
-                    }),
-                    metadata: None,
-                    files: USER,
-                }),
-                SettingsPageItem::SettingItem(SettingItem {
                     title: "Include Ignored",
                     description: "Include ignored files in search results by default.",
                     field: Box::new(SettingField {
@@ -5731,32 +5716,28 @@ pub(crate) fn settings_data(cx: &App) -> Vec<SettingsPage> {
                         metadata: None,
                         files: USER,
                     }),
-                    metadata: None,
-                    files: USER,
-                }),
-                SettingsPageItem::SettingItem(SettingItem {
-                    title: "Max Recent History Items",
-                    description: "Maximum number of recent history items to display in agent panel.",
-                    field: Box::new(SettingField {
-                        json_path: Some("agent.max_recent_history_items"),
-                        pick: |settings_content| {
-                            settings_content
-                                .agent
-                                .as_ref()?
-                                .max_recent_history_items
-                                .as_ref()
-                        },
-                        write: |settings_content, value| {
-                            settings_content
-                                .agent
-                                .get_or_insert_default()
-                                .max_recent_history_items = value;
-                        },
-                    }),
-                    metadata: None,
-                    files: USER,
-                }),
-            ],
+                    SettingsPageItem::SettingItem(SettingItem {
+                        title: "Max Recent History Items",
+                        description: "Maximum number of recent history items to display in agent panel.",
+                        field: Box::new(SettingField {
+                            json_path: Some("agent.max_recent_history_items"),
+                            pick: |settings_content| {
+                                settings_content
+                                    .agent
+                                    .as_ref()?
+                                    .max_recent_history_items
+                                    .as_ref()
+                            },
+                            write: |settings_content, value| {
+                                settings_content
+                                    .agent
+                                    .get_or_insert_default()
+                                    .max_recent_history_items = value;
+                            },
+                        }),
+                        metadata: None,
+                        files: USER,
+                    })
                 ];
                 items.extend(edit_prediction_language_settings_section());
                 items.extend(
