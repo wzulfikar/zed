@@ -21,7 +21,6 @@ use settings::{
 use zed_actions::OpenBrowser;
 use zed_actions::agent::{OpenClaudeCodeOnboardingModal, ReauthenticateAgent};
 
-use crate::acp::{AcpThreadHistory, ThreadHistoryEvent};
 use crate::context_store::ContextStore;
 use crate::ui::{AcpOnboardingModal, ClaudeCodeOnboardingModal};
 use crate::{
@@ -34,6 +33,10 @@ use crate::{
     slash_command::SlashCommandCompletionProvider,
     text_thread_editor::{AgentPanelDelegate, TextThreadEditor, make_lsp_adapter_delegate},
     ui::{AgentOnboardingModal, EndTrialUpsell},
+};
+use crate::{
+    ExpandMessageEditor,
+    acp::{AcpThreadHistory, ThreadHistoryEvent},
 };
 use crate::{
     ExternalAgent, NewExternalAgentThread, NewNativeAgentThreadFromSummary, placeholder_command,
@@ -114,6 +117,12 @@ pub fn init(cx: &mut App) {
                         }
                     },
                 )
+                .register_action(|workspace, _: &ExpandMessageEditor, window, cx| {
+                    if let Some(panel) = workspace.panel::<AgentPanel>(cx) {
+                        workspace.focus_panel::<AgentPanel>(window, cx);
+                        panel.update(cx, |panel, cx| panel.expand_message_editor(window, cx));
+                    }
+                })
                 .register_action(|workspace, _: &OpenHistory, window, cx| {
                     if let Some(panel) = workspace.panel::<AgentPanel>(cx) {
                         workspace.focus_panel::<AgentPanel>(window, cx);
@@ -1002,6 +1011,15 @@ impl AgentPanel {
             cx,
         )
         .detach_and_log_err(cx);
+    }
+
+    fn expand_message_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(thread_view) = self.active_thread_view() {
+            thread_view.update(cx, |view, cx| {
+                view.expand_message_editor(&ExpandMessageEditor, window, cx);
+                view.focus_handle(cx).focus(window);
+            });
+        }
     }
 
     fn open_history(&mut self, window: &mut Window, cx: &mut Context<Self>) {
