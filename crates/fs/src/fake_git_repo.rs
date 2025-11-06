@@ -541,8 +541,9 @@ impl GitRepository for FakeGitRepository {
 
     fn pull(
         &self,
-        _branch: String,
+        _branch: Option<String>,
         _remote: String,
+        _rebase: bool,
         _askpass: AskPassDelegate,
         _env: Arc<HashMap<String, String>>,
         _cx: AsyncApp,

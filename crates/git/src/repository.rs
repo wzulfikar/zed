@@ -531,8 +531,9 @@ pub trait GitRepository: Send + Sync {
 
     fn pull(
         &self,
-        branch_name: String,
+        branch_name: Option<String>,
         upstream_name: String,
+        rebase: bool,
         askpass: AskPassDelegate,
         env: Arc<HashMap<String, String>>,
         // This method takes an AsyncApp to ensure it's invoked on the main thread,
@@ -1688,8 +1689,9 @@ impl GitRepository for RealGitRepository {
 
     fn pull(
         &self,
-        branch_name: String,
+        branch_name: Option<String>,
         remote_name: String,
+        rebase: bool,
         ask_pass: AskPassDelegate,
         env: Arc<HashMap<String, String>>,
         cx: AsyncApp,
@@ -1703,9 +1705,15 @@ impl GitRepository for RealGitRepository {
             command
                 .envs(env.iter())
                 .current_dir(&working_directory?)
-                .args(["pull"])
+                .arg("pull");
+
+            if rebase {
+                command.arg("--rebase");
+            }
+
+            command
                 .arg(remote_name)
-                .arg(branch_name)
+                .args(branch_name)
                 .stdout(smol::process::Stdio::piped())
                 .stderr(smol::process::Stdio::piped());
 

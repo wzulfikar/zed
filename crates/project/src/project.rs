@@ -344,7 +344,7 @@ pub enum Event {
     RevealInProjectPanel(ProjectEntryId),
     SnippetEdit(BufferId, Vec<(lsp::Range, Snippet)>),
     ExpandedAllForEntry(WorktreeId, ProjectEntryId),
-    EntryRenamed(ProjectTransaction),
+    EntryRenamed(ProjectTransaction, ProjectPath, PathBuf),
     AgentLocationChanged,
 }
 
@@ -1072,8 +1072,9 @@ impl Project {
             let context_server_store =
                 cx.new(|cx| ContextServerStore::new(worktree_store.clone(), weak_self.clone(), cx));
 
-            let environment =
-                cx.new(|cx| ProjectEnvironment::new(env, worktree_store.downgrade(), None, cx));
+            let environment = cx.new(|cx| {
+                ProjectEnvironment::new(env, worktree_store.downgrade(), None, false, cx)
+            });
             let manifest_tree = ManifestTree::new(worktree_store.clone(), cx);
             let toolchain_store = cx.new(|cx| {
                 ToolchainStore::local(
@@ -1313,6 +1314,7 @@ impl Project {
                     None,
                     worktree_store.downgrade(),
                     Some(remote.downgrade()),
+                    false,
                     cx,
                 )
             });
@@ -1529,7 +1531,7 @@ impl Project {
         })?;
 
         let environment =
-            cx.new(|cx| ProjectEnvironment::new(None, worktree_store.downgrade(), None, cx))?;
+            cx.new(|cx| ProjectEnvironment::new(None, worktree_store.downgrade(), None, true, cx))?;
         let breakpoint_store =
             cx.new(|_| BreakpointStore::remote(remote_id, client.clone().into()))?;
         let dap_store = cx.new(|cx| {
@@ -2246,7 +2248,11 @@ impl Project {
 
             project
                 .update(cx, |_, cx| {
-                    cx.emit(Event::EntryRenamed(transaction));
+                    cx.emit(Event::EntryRenamed(
+                        transaction,
+                        new_path.clone(),
+                        new_abs_path.clone(),
+                    ));
                 })
                 .ok();
 
