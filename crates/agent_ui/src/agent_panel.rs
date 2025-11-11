@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use settings::{
     DefaultAgentView as DefaultView, LanguageModelProviderSetting, LanguageModelSelection,
 };
-use zed_actions::OpenBrowser;
+
 use zed_actions::agent::{OpenClaudeCodeOnboardingModal, ReauthenticateAgent};
 
 use crate::ui::{AcpOnboardingModal, ClaudeCodeOnboardingModal};
@@ -2191,12 +2191,20 @@ impl AgentPanel {
                                 menu
                             })
                             .separator()
-                            .link(
-                                "Add Other Agents",
-                                OpenBrowser {
-                                    url: zed_urls::external_agents_docs(cx),
-                                }
-                                .boxed_clone(),
+                            .item(
+                                ContextMenuEntry::new("Add More Agents")
+                                    .icon(IconName::Plus)
+                                    .icon_color(Color::Muted)
+                                    .handler({
+                                        move |window, cx| {
+                                            window.dispatch_action(Box::new(zed_actions::Extensions {
+                                                category_filter: Some(
+                                                    zed_actions::ExtensionCategoryFilter::AgentServers,
+                                                ),
+                                                id: None,
+                                            }), cx)
+                                        }
+                                    }),
                             )
                     }))
                 }
