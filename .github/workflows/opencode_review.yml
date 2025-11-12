@@ -27,23 +27,25 @@ jobs:
           OPENCODE_MODEL: "zai-coding-plan/glm-4.6"
           OPENCODE_PERMISSION: '{ "bash": { "./post_pr_comment*": "allow", "gh*": "allow", "gh api*": "deny", "gh pr review*": "deny", "*": "deny" } }'
         run: |
-          # Create post_pr_comment script in the same step where it's used
+          # Create post_pr_comment script
           cat << 'EOF' > $PWD/post_pr_comment
           #!/bin/bash
+          printf '%s' "$1" > /tmp/comment.md
           gh api --method POST \
             -H 'X-GitHub-Api-Version: 2022-11-28' \
             -H "Accept: application/vnd.github+json" \
             /repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
             -f 'commit_id=${{ github.event.pull_request.head.sha }}' \
             -f 'side=RIGHT' \
-            -f "body='$1'" -f "path=$2" -F "line=$3"
+            -f "body@/tmp/comment.md" -f "path=$2" -F "line=$3"
           EOF
           chmod +x $PWD/post_pr_comment
 
-          # Configure OpenCode auth and model
+          # Configure OpenCode auth
           mkdir -p $HOME/.local/share/opencode/
           echo '{"zai-coding-plan": { "type": "api", "key": "'$ZAI_API_KEY'"}}' > $HOME/.local/share/opencode/auth.json
 
+          # Start OpenCode with prompt
           opencode run -m $OPENCODE_MODEL "A new pull request has been created: '${{ github.event.pull_request.title }}'
 
           <repository>
@@ -58,14 +60,14 @@ jobs:
           ${{ github.event.pull_request.body }}
           </pr-description>
 
-          Please check all the code changes in this pull request against the guidelines in '.rules' file in this repository. Diffs are important but make sure you read the entire file to get proper context. Make it clear the suggestions are merely suggestions and the human can decide what to do.
+          Please check all the code changes in this pull request against the guidelines in '.rules' file in this repository. Diffs are important but make sure you read the entire file to get proper context. Make it clear the suggestions are merely suggestions and the human can decide what to do. Be concise and to the point. Start directly with the comment, no need to state e.g. "The guideline states...".
 
-          <rules>
+          How to post the comments:
+
           - Use the 'post_pr_comment' command to create comments on the files for the violations.
           - Leave the comment on the exact line number.
           - If you have a suggested fix, include it in a suggestion code block.
           - Only create comments for actual violations. If the code follows all guidelines, don't run any 'post_pr_comment'.
           - Command format MUST be like this:
             ./post_pr_comment '[comment]' '[path-to-file]' '[line]'
-          </rules>
           "
