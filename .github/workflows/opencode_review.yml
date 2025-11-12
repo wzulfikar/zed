@@ -70,7 +70,7 @@ jobs:
           How to post the comments:
 
           - Use the `post_pr_comment` command to create comments on the files for the violations.
-          - Leave the comment on the exact line number.
+          - Focus on changes in the diffs so you can leave the comment on the exact line number.
           - If you have a suggested fix, include it in a suggestion code block.
           - Only create comments for actual violations. If the code follows all guidelines, don't run any `post_pr_comment`.
           - Command format MUST be like this:
