@@ -69,11 +69,11 @@ use rules_library::{RulesLibrary, open_rules_library};
 use search::{BufferSearchBar, buffer_search};
 use settings::{Settings, SettingsStore, update_settings_file};
 use theme::ThemeSettings;
-use ui::utils::WithRemSize;
 use ui::{
     Callout, ContextMenu, ContextMenuEntry, KeyBinding, PopoverMenu, PopoverMenuHandle,
     ProgressBar, Tab, TabBar, TabCloseSide, TabPosition, Tooltip, prelude::*,
 };
+use ui::{IconButtonShape, utils::WithRemSize};
 use util::ResultExt as _;
 use workspace::{
     CollaboratorId, DraggedSelection, DraggedTab, ToggleZoom, ToolbarItemView, Workspace,
@@ -2761,6 +2761,7 @@ impl AgentPanel {
                 .start_slot(self.render_tab_agent_icon(index, tab.agent(), &agent_server_store, cx))
                 .end_slot(
                     IconButton::new(("close-agent-tab", index), IconName::Close)
+                        .shape(IconButtonShape::Square)
                         .icon_size(IconSize::Small)
                         .visible_on_hover("")
                         .on_click(cx.listener(move |this: &mut Self, _, window, cx| {
