@@ -23,7 +23,7 @@ jobs:
       - name: Check PR guidelines compliance
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENCODE_PERMISSION: '{ "bash": { "gh*": "allow", "gh pr review*": "deny", "*": "deny" } }'
         run: |
           opencode run -m opencode/big-pickle "A new pull request has been created: '${{ github.event.pull_request.title }}'
