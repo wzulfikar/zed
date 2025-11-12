@@ -2173,14 +2173,14 @@ impl AgentPanel {
                 .h(Tab::content_height(cx))
                 .px(DynamicSpacing::Base04.px(cx))
                 .gap(DynamicSpacing::Base04.rems(cx))
-                .bg(cx.theme().colors().tab_bar_background)
                 .border_0()
-                .child(h_flex().flex_grow().items_center().child(content))
+                .child(h_flex().flex_grow().items_center().pl_1().child(content))
                 .child(
                     Icon::new(IconName::Return)
                         .size(IconSize::Small)
                         .color(Color::Muted),
                 )
+                .pr_2()
                 .on_action(cx.listener(|this, _: &Confirm, window, cx| {
                     if this.title_edit_overlay_tab_id.take().is_some() {
                         this.focus_active_panel_thread(window, cx);
@@ -2696,11 +2696,9 @@ impl AgentPanel {
             .child(self.render_recent_entries_menu(IconName::MenuAltTemp, Corner::TopRight, cx))
             .child(self.render_panel_options_menu(window, cx));
 
-        let is_editing_title = self.title_edit_overlay_tab_id.is_some();
         let mut tab_bar = TabBar::new("agent-tab-bar")
             .track_scroll(self.tab_bar_scroll_handle.clone())
             .end_child(end_slot);
-        // .when(is_editing_title, |this| this.border_b_1());
 
         if let Some(overlay_view) = &self.overlay_view {
             let TabLabelRender {
