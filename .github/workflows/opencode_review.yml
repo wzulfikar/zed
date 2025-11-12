@@ -31,13 +31,18 @@ jobs:
           mkdir -p $HOME/.local/share/opencode/
           echo '{"zai-coding-plan": { "type": "api", "key": "'$ZAI_API_KEY'"}}' > $HOME/.local/share/opencode/auth.json
 
-          alias post_pr_comment="gh api \
+          # Create post_pr_comment script in the same step where it's used
+          cat << 'EOF' > $HOME/post_pr_comment
+          #!/bin/bash
+          gh api \
             --method POST \
             -H 'Accept: application/vnd.github+json' \
             -H 'X-GitHub-Api-Version: 2022-11-28' \
             /repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
             -f 'commit_id=${{ github.event.pull_request.head.sha }}' \
             -f 'side=RIGHT' \
-            $@"
+            $@
+          EOF
+          chmod +x $HOME/post_pr_comment
 
-          opencode run -m $OPENCODE_MODEL "run 'post_pr_comment hello'"
+          opencode run -m $OPENCODE_MODEL 'run $HOME/post_pr_comment hello'"
