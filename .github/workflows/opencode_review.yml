@@ -27,7 +27,9 @@ jobs:
           OPENCODE_PERMISSION: '{ "bash": { "gh*": "allow", "gh pr review*": "deny", "*": "deny" } }'
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
         run: |
+          mkdir -p $HOME/.local/share/opencode/
           echo '{"zai-coding-plan": { "type": "api", "key": "'$ZAI_API_KEY'"}}' > $HOME/.local/share/opencode/auth.json
+
           opencode run -m zai-coding-plan/glm-4.6 "A new pull request has been created: '${{ github.event.pull_request.title }}'
 
           <pr-number>
