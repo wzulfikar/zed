@@ -20,28 +20,39 @@ jobs:
       - name: Install opencode
         run: curl -fsSL https://opencode.ai/install | bash
 
+      - name: Configure OpenCode
+        env:
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          OPENCODE_MODEL: "zai-coding-plan/glm-4.6"
+        run: |
+          mkdir -p $HOME/.config/opencode/
+          echo '{"model": "'$OPENCODE_MODEL'"}' > $HOME/.config/opencode/config.json
+          mkdir -p $HOME/.local/share/opencode/
+          echo '{"zai-coding-plan": { "type": "api", "key": "'$ZAI_API_KEY'"}}' > $HOME/.local/share/opencode/auth.json
+
+      - name: Create post_pr_comment script
+        run: |
+          cat << 'EOF' > $HOME/post_pr_comment.sh
+          #!/bin/bash
+          gh api \
+            --method POST \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            /repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
+            -f 'commit_id=${{ github.event.pull_request.head.sha }}' \
+            -f 'side=RIGHT' \
+            $@
+          EOF
+          chmod +x $HOME/post_pr_comment
+          echo "$HOME/post_pr_comment" >> $GITHUB_PATH
+
       - name: Review PR
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           OPENCODE_PERMISSION: '{ "bash": { "post_pr_comment": "allow", "*": "deny" } }'
           OPENCODE_MODEL: "zai-coding-plan/glm-4.6"
-          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
         run: |
-          mkdir -p $HOME/.local/share/opencode/
-          echo '{"zai-coding-plan": { "type": "api", "key": "'$ZAI_API_KEY'"}}' > $HOME/.local/share/opencode/auth.json
-
-          post_pr_comment() {
-            gh api \
-              --method POST \
-              -H 'Accept: application/vnd.github+json' \
-              -H 'X-GitHub-Api-Version: 2022-11-28' \
-              /repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
-              -f 'commit_id=${{ github.event.pull_request.head.sha }}' \
-              -f 'side=RIGHT' \
-              $@
-          }
-
           opencode run -m $OPENCODE_MODEL "A new pull request has been created: '${{ github.event.pull_request.title }}'
 
           <pr-description>
