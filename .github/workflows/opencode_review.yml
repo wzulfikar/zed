@@ -25,14 +25,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENCODE_MODEL: "zai-coding-plan/glm-4.6"
-          OPENCODE_PERMISSION: '{ "bash": { "/home/runner/post_pr_comment": "allow", "*": "deny" } }'
+          OPENCODE_PERMISSION: '{ "bash": { "/home/runner/post_pr_comment *": "allow", "*": "deny" } }'
         run: |
           # Configure OpenCode auth and model
           mkdir -p $HOME/.local/share/opencode/
           echo '{"zai-coding-plan": { "type": "api", "key": "'$ZAI_API_KEY'"}}' > $HOME/.local/share/opencode/auth.json
 
           # Create post_pr_comment script in the same step where it's used
-          cat << 'EOF' > ./post_pr_comment
+          cat << 'EOF' > $HOME/post_pr_comment
           #!/bin/bash
           gh api \
             --method POST \
@@ -43,6 +43,6 @@ jobs:
             -f 'side=RIGHT' \
             $@
           EOF
-          chmod +x ./post_pr_comment
+          chmod +x $HOME/post_pr_comment
 
-          opencode run -m $OPENCODE_MODEL "run ./post_pr_comment hello"
+          opencode run -m $OPENCODE_MODEL "run $HOME/post_pr_comment hello"
