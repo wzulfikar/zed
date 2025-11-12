@@ -7,10 +7,33 @@ on:
     types: [created]
 
 jobs:
+  # Job 1: Auto-trigger review on commits
+  trigger-review:
+    if: |
+      github.event_name == 'pull_request' && 
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    
+    steps:
+      - name: Add review trigger comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '/ocreview'
+            })
+
+  # Job 2: Run review when comment is detected
   opencode-review:
     if: |
-      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '/oc review'))
+      github.event_name == 'issue_comment' && 
+      contains(github.event.comment.body, '/ocreview')
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -28,7 +51,7 @@ jobs:
       - name: Get target branch
         id: target-branch
         run: |
-          TARGET_BRANCH="${{ github.event.pull_request.base.ref || 'main' }}"
+          TARGET_BRANCH="${{ github.event.issue.pull_request.base.ref || 'zd-main' }}"
           echo "target-branch=$TARGET_BRANCH" >> $GITHUB_OUTPUT
         shell: bash
 
@@ -45,4 +68,4 @@ jobs:
           model: opencode/big-pickle
           github_token: ${{ secrets.GITHUB_TOKEN }}
           command: |
-            Get diff between current branch and ${{ steps.target-branch.outputs.target-branch }} branch, then create comprehensive review for the patch with focus on finding potential bug. Include code snippet for the fix if possible. Once done, post the result as a PR comment.
+            use git diff to get diff between current branch and ${{ steps.target-branch.outputs.target-branch }} branch, then create comprehensive review for the patch with focus on finding potential bug. Include code snippet for the fix if possible. Once done, post the result as a PR comment
