@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::ops::Range;
 use std::path::Path;
 use std::rc::Rc;
@@ -755,7 +755,6 @@ impl AgentPanel {
             agent_panel_menu_handle: PopoverMenuHandle::default(),
             agent_navigation_menu_handle: PopoverMenuHandle::default(),
             agent_navigation_menu: None,
-            panel_focus_handle,
             _extension_subscription: extension_subscription,
             width: None,
             height: None,
@@ -766,9 +765,9 @@ impl AgentPanel {
             history_store,
             selected_agent: AgentType::default(),
             detached_threads: HashMap::new(),
-            selected_agent: selected_agent.clone(),
             loading: false,
             pending_tab_removal: None,
+            panel_focus_handle,
             tabs: vec![AgentPanelTab::new(active_view, selected_agent)],
             active_tab_id: 0,
             tab_bar_scroll_handle: ScrollHandle::new(),
