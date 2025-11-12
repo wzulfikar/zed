@@ -20,13 +20,15 @@ jobs:
       - name: Install opencode
         run: curl -fsSL https://opencode.ai/install | bash
 
-      - name: Check PR guidelines compliance
+      - name: Review PR
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENCODE_PERMISSION: '{ "bash": { "gh*": "allow", "gh pr review*": "deny", "*": "deny" } }'
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
         run: |
-          opencode run -m opencode/big-pickle "A new pull request has been created: '${{ github.event.pull_request.title }}'
+          echo '{"zai-coding-plan": { "type": "api", "key": "'$ZAI_API_KEY'"}}' > $HOME/.local/share/opencode/auth.json
+          opencode run -m zai-coding-plan/glm-4.6 "A new pull request has been created: '${{ github.event.pull_request.title }}'
 
           <pr-number>
           ${{ github.event.pull_request.number }}
