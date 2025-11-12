@@ -812,29 +812,6 @@ impl AgentPanel {
         }
     }
 
-    fn view_identity(view: &ActiveView, cx: &mut Context<Self>) -> Option<AgentPanelTabIdentity> {
-        match view {
-            ActiveView::ExternalAgentThread { thread_view, .. } => thread_view
-                .read(cx)
-                .session_id(cx)
-                .map(AgentPanelTabIdentity::AcpThread),
-            ActiveView::TextThread {
-                text_thread_editor, ..
-            } => {
-                let text_thread = {
-                    let editor = text_thread_editor.read(cx);
-                    editor.text_thread().clone()
-                };
-                text_thread
-                    .read(cx)
-                    .path()
-                    .cloned()
-                    .map(AgentPanelTabIdentity::TextThread)
-            }
-            ActiveView::History | ActiveView::Configuration => None,
-        }
-    }
-
     fn new_thread(&mut self, _action: &NewThread, window: &mut Window, cx: &mut Context<Self>) {
         self.new_agent_thread(AgentType::NativeAgent, window, cx);
     }
@@ -1095,7 +1072,7 @@ impl AgentPanel {
                 self.set_active_tab_by_id(previous_tab_id, window, cx);
             }
         } else {
-            self.set_overlay_view(ActiveView::History, window, cx);
+            self.set_tab_overlay_view(ActiveView::History, window, cx);
         }
         cx.notify();
     }
@@ -1291,7 +1268,7 @@ impl AgentPanel {
         let context_server_store = self.project.read(cx).context_server_store();
         let fs = self.fs.clone();
 
-        self.set_overlay_view(ActiveView::Configuration, window, cx);
+        self.set_tab_overlay_view(ActiveView::Configuration, window, cx);
         self.configuration = Some(cx.new(|cx| {
             AgentConfiguration::new(
                 fs,
@@ -1560,13 +1537,6 @@ impl AgentPanel {
             window,
             cx,
         );
-    }
-
-    fn set_overlay_view(&mut self, view: ActiveView, window: &mut Window, cx: &mut Context<Self>) {
-        self.title_edit_overlay_tab_id = None;
-        self.overlay_previous_tab_id = Some(self.active_tab_id);
-        self.overlay_view = Some(view);
-        self.focus_handle(cx).focus(window);
     }
 
     fn focus_active_panel_thread(&self, window: &mut Window, cx: &mut Context<Self>) {
@@ -2352,7 +2322,8 @@ impl AgentPanel {
         cx: &mut Context<Self>,
     ) -> Option<TabId> {
         for (index, tab) in self.tabs.iter().enumerate() {
-            if Self::view_identity(tab.view(), cx).is_some_and(|existing| existing == *identity) {
+            if Self::tab_view_identity(tab.view(), cx).is_some_and(|existing| existing == *identity)
+            {
                 return Some(index);
             }
         }
@@ -2399,6 +2370,18 @@ impl AgentPanel {
         self.focus_handle(cx).focus(window);
     }
 
+    fn set_tab_overlay_view(
+        &mut self,
+        view: ActiveView,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.title_edit_overlay_tab_id = None;
+        self.overlay_previous_tab_id = Some(self.active_tab_id);
+        self.overlay_view = Some(view);
+        self.focus_handle(cx).focus(window);
+    }
+
     fn push_tab(
         &mut self,
         new_view: ActiveView,
@@ -2406,9 +2389,9 @@ impl AgentPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let view_identity = Self::view_identity(&new_view, cx);
+        let tab_view_identity = Self::tab_view_identity(&new_view, cx);
 
-        if let Some(identity) = view_identity.as_ref() {
+        if let Some(identity) = tab_view_identity.as_ref() {
             if let Some(existing_id) = self.find_tab_by_identity(identity, cx) {
                 self.set_active_tab_by_id(existing_id, window, cx);
                 return;
@@ -2431,7 +2414,7 @@ impl AgentPanel {
                 }
             }
             ActiveView::History | ActiveView::Configuration => {
-                self.set_overlay_view(new_view, window, cx);
+                self.set_tab_overlay_view(new_view, window, cx);
             }
         }
     }
@@ -2492,6 +2475,32 @@ impl AgentPanel {
         } else {
             let preview: String = title.chars().take(MAX_CHARS).collect();
             (format!("{preview}...").into(), Some(title))
+        }
+    }
+
+    fn tab_view_identity(
+        view: &ActiveView,
+        cx: &mut Context<Self>,
+    ) -> Option<AgentPanelTabIdentity> {
+        match view {
+            ActiveView::ExternalAgentThread { thread_view, .. } => thread_view
+                .read(cx)
+                .session_id(cx)
+                .map(AgentPanelTabIdentity::AcpThread),
+            ActiveView::TextThread {
+                text_thread_editor, ..
+            } => {
+                let text_thread = {
+                    let editor = text_thread_editor.read(cx);
+                    editor.text_thread().clone()
+                };
+                text_thread
+                    .read(cx)
+                    .path()
+                    .cloned()
+                    .map(AgentPanelTabIdentity::TextThread)
+            }
+            ActiveView::History | ActiveView::Configuration => None,
         }
     }
 
