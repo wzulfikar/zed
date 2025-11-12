@@ -46,4 +46,4 @@ jobs:
           EOF
           chmod +x $PWD/post_pr_comment
 
-          opencode run -m $OPENCODE_MODEL "run pwd, then ls, then ./post_pr_comment hello"
+          opencode run -m $OPENCODE_MODEL "run post_pr_comment hello"
