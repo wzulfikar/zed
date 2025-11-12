@@ -1,0 +1,52 @@
+name: Opencode PR Review
+
+on:
+  pull_request:
+    types: [ready_for_review, synchronize]
+  issue_comment:
+    types: [created]
+
+jobs:
+  opencode-review:
+    if: |
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '/oc review'))
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get target branch
+        id: target-branch
+        run: |
+          if [ -n "$GITHUB_BASE_REF" ]; then
+            TARGET_BRANCH="$GITHUB_BASE_REF"
+          else
+            TARGET_BRANCH="zd-main"
+          fi
+          echo "target-branch=$TARGET_BRANCH" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Fetch target branch
+        run: |
+          git fetch origin "${{ steps.target-branch.outputs.target-branch }}" --depth=350
+        shell: bash
+
+      - name: Generate PR review with opencode
+        uses: sst/opencode/github@latest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          model: opencode/big-pickle
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          command: |
+            use git diff to get diff between current branch and ${{ steps.target-branch.outputs.target-branch }} branch, then create comprehensive review for the patch with focus on finding potential bug. Include code snippet for the fix if possible. Once done, post the result as a PR comment
