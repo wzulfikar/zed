@@ -100,6 +100,8 @@ actions!(
         OpenActiveThreadAsMarkdown,
         /// Opens the agent diff view to review changes.
         OpenAgentDiff,
+        /// Closes the currently active thread tab.
+        CloseActiveThreadTab,
         /// Keeps the current suggestion or change.
         Keep,
         /// Rejects the current suggestion or change.
