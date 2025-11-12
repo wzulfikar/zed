@@ -10,7 +10,6 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-      issues: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,10 +26,6 @@ jobs:
           OPENCODE_MODEL: "zai-coding-plan/glm-4.6"
           OPENCODE_PERMISSION: '{ "bash": { "gh*": "allow", "./post_pr_comment*": "allow", "*": "deny" } }'
         run: |
-          # Configure OpenCode auth and model
-          mkdir -p $HOME/.local/share/opencode/
-          echo '{"zai-coding-plan": { "type": "api", "key": "'$ZAI_API_KEY'"}}' > $HOME/.local/share/opencode/auth.json
-
           # Create post_pr_comment script in the same step where it's used
           cat << 'EOF' > $PWD/post_pr_comment
           #!/bin/bash
@@ -40,9 +35,13 @@ jobs:
             /repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
             -f 'commit_id=${{ github.event.pull_request.head.sha }}' \
             -f 'side=RIGHT' \
-            -f "path=$1" -F "line=$2" -f 'body="'$1'"'
+            -f "path=$1" -F "line=$2" -f 'body="'$3'"'
           EOF
           chmod +x $PWD/post_pr_comment
+
+          # Configure OpenCode auth and model
+          mkdir -p $HOME/.local/share/opencode/
+          echo '{"zai-coding-plan": { "type": "api", "key": "'$ZAI_API_KEY'"}}' > $HOME/.local/share/opencode/auth.json
 
           opencode run -m $OPENCODE_MODEL "A new pull request has been created: '${{ github.event.pull_request.title }}'
 
@@ -64,7 +63,7 @@ jobs:
 
           Command MUST be like this:
           <command>
-          ./post_pr_comment '[path-to-file]' '[line]' '[summary of issue]'
+          ./post_pr_comment '[path-to-file]' [line] '[summary of issue]'
           </command>
 
           Only create comments for actual violations. If the code follows all guidelines, don't run any 'post_pr_comment'."
