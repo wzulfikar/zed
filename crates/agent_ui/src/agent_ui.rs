@@ -3,6 +3,7 @@ mod agent_configuration;
 mod agent_diff;
 mod agent_model_selector;
 mod agent_panel;
+mod agent_panel_tab;
 mod buffer_codegen;
 mod context;
 mod context_picker;
@@ -78,6 +79,8 @@ actions!(
         AddContextServer,
         /// Removes the currently selected thread.
         RemoveSelectedThread,
+        /// Closes the currently active thread tab.
+        CloseActiveThreadTab,
         /// Starts a chat conversation with follow-up enabled.
         ChatWithFollow,
         /// Cycles to the next inline assist suggestion.
