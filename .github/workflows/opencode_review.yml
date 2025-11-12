@@ -57,8 +57,6 @@ jobs:
           Use the 'post_pr_comment' create comments on the files for the violations. Try to leave the comment on the exact line number. If you have a suggested fix include it in a suggestion code block.
 
           Command MUST be like this:
-          ```
           post_pr_comment -f 'body=[summary of issue]' -f 'path=[path-to-file]' -F 'line=[line]'
-          ```
 
           Only create comments for actual violations. If the code follows all guidelines, don't run any 'post_pr_comment'."
