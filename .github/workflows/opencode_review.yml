@@ -30,9 +30,11 @@ jobs:
           # Create post_pr_comment script
           cat << 'EOF' > $PWD/post_pr_comment
           #!/bin/bash
+          # Use temporary file to store the comment so we can use full markdown format
           printf '%s' "$1" > /tmp/comment.md
           # Strip full path to make it relative to current working directory
           diff_path=$(realpath --relative-to=. "$2")
+
           gh api --method POST \
             -H 'X-GitHub-Api-Version: 2022-11-28' \
             -H "Accept: application/vnd.github+json" \
