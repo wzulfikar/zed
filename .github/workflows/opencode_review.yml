@@ -25,7 +25,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENCODE_MODEL: "zai-coding-plan/glm-4.6"
-          OPENCODE_PERMISSION: '{ "bash": { "./post_pr_comment *": "allow", "*": "deny" } }'
+          OPENCODE_PERMISSION: '{ "bash": { "./post_pr_comment*": "allow", "*": "deny" } }'
         run: |
           # Configure OpenCode auth and model
           mkdir -p $HOME/.local/share/opencode/
@@ -34,14 +34,11 @@ jobs:
           # Create post_pr_comment script in the same step where it's used
           cat << 'EOF' > $PWD/post_pr_comment
           #!/bin/bash
-          gh api \
-            --method POST \
-            -H 'Accept: application/vnd.github+json' \
-            -H 'X-GitHub-Api-Version: 2022-11-28' \
+          gh api --method POST -H 'X-GitHub-Api-Version: 2022-11-28' \
             /repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
             -f 'commit_id=${{ github.event.pull_request.head.sha }}' \
             -f 'side=RIGHT' \
-            $@
+            -f "body=$1" -f "path=$2" -f "line=$3"
           EOF
           chmod +x $PWD/post_pr_comment
 
@@ -53,9 +50,11 @@ jobs:
 
           Please check all the code changes in this pull request against the guidelines in '.rules' file in this repository. Diffs are important but make sure you read the entire file to get proper context. Make it clear the suggestions are merely suggestions and the human can decide what to do.
 
-          Use the 'post_pr_comment' create comments on the files for the violations. Try to leave the comment on the exact line number. If you have a suggested fix include it in a suggestion code block.
+          Use the 'post_pr_comment' command to create comments on the files for the violations. Try to leave the comment on the exact line number. If you have a suggested fix, include it in a suggestion code block.
 
           Command MUST be like this:
-          ./post_pr_comment -f 'body=[summary of issue]' -f 'path=[path-to-file]' -F 'line=[line]'
+          <command>
+          ./post_pr_comment '[summary of issue]' '[path-to-file]' '[line]'
+          </command>
 
           Only create comments for actual violations. If the code follows all guidelines, don't run any 'post_pr_comment'."
