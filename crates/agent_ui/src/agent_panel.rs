@@ -58,8 +58,7 @@ use fs::Fs;
 use gpui::{
     Action, Animation, AnimationExt, AnyElement, App, AsyncWindowContext, Corner, DismissEvent,
     Entity, EventEmitter, ExternalPaths, FocusHandle, Focusable, KeyContext, Pixels, ScrollHandle,
-    SharedString, Subscription, Task, UpdateGlobal, WeakEntity, bounce, ease_in_out, prelude::*,
-    pulsating_between,
+    SharedString, Subscription, Task, UpdateGlobal, WeakEntity, prelude::*, pulsating_between,
 };
 use language::LanguageRegistry;
 use language_model::{ConfigurationError, LanguageModelRegistry};
@@ -1933,18 +1932,21 @@ impl AgentPanel {
 
                 let label = if is_generating {
                     Label::new(label_text)
-                        .color(Color::Muted)
                         .truncate()
+                        .when(!is_active, |label| label.color(Color::Muted))
                         .with_animation(
                             "pulsating-tab-label",
                             Animation::new(Duration::from_secs(2))
                                 .repeat()
-                                .with_easing(bounce(ease_in_out)),
+                                .with_easing(pulsating_between(0.4, 0.8)),
                             |label, delta| label.alpha(delta),
                         )
                         .into_any_element()
                 } else {
-                    Label::new(label_text).truncate().into_any_element()
+                    Label::new(label_text)
+                        .truncate()
+                        .when(!is_active, |label| label.color(Color::Muted))
+                        .into_any_element()
                 };
 
                 TabLabelRender {
@@ -1970,19 +1972,21 @@ impl AgentPanel {
                     TextThreadSummary::Pending => {
                         let label = if is_generating {
                             Label::new(TextThreadSummary::DEFAULT)
-                                .color(Color::Muted)
                                 .truncate()
+                                .when(!is_active, |label| label.color(Color::Muted))
                                 .with_animation(
                                     "pulsating-tab-label",
                                     Animation::new(Duration::from_secs(2))
                                         .repeat()
-                                        .with_easing(bounce(ease_in_out)),
+                                        .with_easing(pulsating_between(0.4, 0.8)),
                                     |label, delta| label.alpha(delta),
                                 )
                                 .into_any_element()
                         } else {
                             Label::new(TextThreadSummary::DEFAULT)
+                                .color(Color::Muted)
                                 .truncate()
+                                .when(!is_active, |label| label.color(Color::Muted))
                                 .into_any_element()
                         };
 
@@ -2002,16 +2006,20 @@ impl AgentPanel {
                             let label = if is_generating {
                                 Label::new(label_text)
                                     .truncate()
+                                    .when(!is_active, |label| label.color(Color::Muted))
                                     .with_animation(
                                         "pulsating-tab-label",
                                         Animation::new(Duration::from_secs(2))
                                             .repeat()
-                                            .with_easing(bounce(ease_in_out)),
+                                            .with_easing(pulsating_between(0.4, 0.8)),
                                         |label, delta| label.alpha(delta),
                                     )
                                     .into_any_element()
                             } else {
-                                Label::new(label_text).truncate().into_any_element()
+                                Label::new(label_text)
+                                    .truncate()
+                                    .when(!is_active, |label| label.color(Color::Muted))
+                                    .into_any_element()
                             };
 
                             TabLabelRender {
@@ -2034,18 +2042,21 @@ impl AgentPanel {
 
                         let label = if is_generating {
                             Label::new(label_text)
-                                .color(Color::Muted)
                                 .truncate()
+                                .when(!is_active, |label| label.color(Color::Muted))
                                 .with_animation(
                                     "pulsating-tab-label",
                                     Animation::new(Duration::from_secs(2))
                                         .repeat()
-                                        .with_easing(bounce(ease_in_out)),
+                                        .with_easing(pulsating_between(0.4, 0.8)),
                                     |label, delta| label.alpha(delta),
                                 )
                                 .into_any_element()
                         } else {
-                            Label::new(label_text).truncate().into_any_element()
+                            Label::new(label_text)
+                                .truncate()
+                                .when(!is_active, |label| label.color(Color::Muted))
+                                .into_any_element()
                         };
 
                         TabLabelRender {
