@@ -994,7 +994,11 @@
     // Minimum number of lines to display in the agent message editor.
     //
     // Default: 4
-    "message_editor_min_lines": 4
+    "message_editor_min_lines": 4,
+    // Maximum number of items to show in recent history.
+    //
+    // Default: 3
+    "max_recent_history_items": 3
   },
   // Whether the screen sharing icon is shown in the os status bar.
   "show_call_status_icon": true,
