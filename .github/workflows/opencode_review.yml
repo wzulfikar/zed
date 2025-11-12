@@ -10,7 +10,6 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-      issues: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -40,11 +39,19 @@ jobs:
             /repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
             -f 'commit_id=${{ github.event.pull_request.head.sha }}' \
             -f 'side=RIGHT' \
-            -f "body=$1" -f "path=$2" -F "line=$3"
+            -f "path=$1" -F "line=$2" -f 'body="'$1'"'
           EOF
           chmod +x $PWD/post_pr_comment
 
           opencode run -m $OPENCODE_MODEL "A new pull request has been created: '${{ github.event.pull_request.title }}'
+
+          <repository>
+          ${{ github.repository }}
+          </repository>
+
+          <pr-number>
+          ${{ github.event.pull_request.number }}
+          </pr-number>
 
           <pr-description>
           ${{ github.event.pull_request.body }}
@@ -56,7 +63,7 @@ jobs:
 
           Command MUST be like this:
           <command>
-          ./post_pr_comment '[summary of issue]' '[path-to-file]' '[line]'
+          ./post_pr_comment '[path-to-file]' '[line]' '[summary of issue]'
           </command>
 
           Only create comments for actual violations. If the code follows all guidelines, don't run any 'post_pr_comment'."
