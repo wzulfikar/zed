@@ -24,6 +24,7 @@ use settings::{
 
 use zed_actions::agent::{OpenClaudeCodeOnboardingModal, ReauthenticateAgent};
 
+use crate::agent_panel_tab::{AgentPanelTab, AgentPanelTabIdentity, TabId, TabLabelRender};
 use crate::ui::{AcpOnboardingModal, ClaudeCodeOnboardingModal};
 use crate::{
     AddContextServer, AgentDiffPane, CloseActiveThreadTab, DeleteRecentlyOpenThread, Follow,
@@ -230,9 +231,7 @@ pub fn init(cx: &mut App) {
     .detach();
 }
 
-type TabId = usize;
-
-enum ActiveView {
+pub enum ActiveView {
     ExternalAgentThread {
         thread_view: Entity<AcpThreadView>,
     },
@@ -244,36 +243,6 @@ enum ActiveView {
     },
     History,
     Configuration,
-}
-
-struct AgentPanelTab {
-    view: ActiveView,
-    agent: AgentType,
-}
-
-impl AgentPanelTab {
-    fn new(view: ActiveView, agent: AgentType) -> Self {
-        Self { view, agent }
-    }
-
-    fn view(&self) -> &ActiveView {
-        &self.view
-    }
-
-    fn agent(&self) -> &AgentType {
-        &self.agent
-    }
-}
-
-struct TabLabelRender {
-    element: AnyElement,
-    tooltip: Option<SharedString>,
-}
-
-#[derive(Clone, PartialEq, Eq)]
-enum AgentPanelTabIdentity {
-    AcpThread(acp::SessionId),
-    TextThread(Arc<Path>),
 }
 
 enum WhichFontSize {
@@ -830,12 +799,6 @@ impl AgentPanel {
             .unwrap_or(true)
     }
 
-    fn active_tab(&self) -> &AgentPanelTab {
-        self.tabs
-            .get(self.active_tab_id)
-            .unwrap_or_else(|| &self.tabs[0])
-    }
-
     fn active_view(&self) -> &ActiveView {
         self.overlay_view
             .as_ref()
@@ -870,19 +833,6 @@ impl AgentPanel {
             }
             ActiveView::History | ActiveView::Configuration => None,
         }
-    }
-
-    fn find_tab_by_identity(
-        &self,
-        identity: &AgentPanelTabIdentity,
-        cx: &mut Context<Self>,
-    ) -> Option<TabId> {
-        for (index, tab) in self.tabs.iter().enumerate() {
-            if Self::view_identity(tab.view(), cx).is_some_and(|existing| existing == *identity) {
-                return Some(index);
-            }
-        }
-        None
     }
 
     fn new_thread(&mut self, _action: &NewThread, window: &mut Window, cx: &mut Context<Self>) {
@@ -1455,46 +1405,6 @@ impl AgentPanel {
         }
     }
 
-    fn set_active_tab_by_id(&mut self, new_id: TabId, window: &mut Window, cx: &mut Context<Self>) {
-        // TODO: need to check the total items in the list, if it is equal to 1, we should overlay it
-        let Some((tab_agent, text_thread_editor)) = self.tabs.get(new_id).map(|tab| {
-            let editor = match tab.view() {
-                ActiveView::TextThread {
-                    text_thread_editor, ..
-                } => Some(text_thread_editor.clone()),
-                _ => None,
-            };
-            (tab.agent().clone(), editor)
-        }) else {
-            log::info!("The input new_id is not in the list views!");
-            return;
-        };
-
-        self.overlay_view = None;
-        self.overlay_previous_tab_id = None;
-        self.title_edit_overlay_tab_id = None;
-        self.active_tab_id = new_id;
-        self.tab_bar_scroll_handle.scroll_to_item(new_id);
-
-        if self.selected_agent != tab_agent {
-            self.selected_agent = tab_agent.clone();
-            self.serialize(cx);
-        }
-
-        if let Some(text_thread_editor) = text_thread_editor {
-            self.history_store.update(cx, |store, cx| {
-                if let Some(path) = text_thread_editor.read(cx).text_thread().read(cx).path() {
-                    store.push_recently_opened_entry(
-                        agent::HistoryEntryId::TextThread(path.clone()),
-                        cx,
-                    )
-                }
-            });
-        }
-
-        self.focus_handle(cx).focus(window);
-    }
-
     fn populate_recently_opened_menu_section(
         mut menu: ContextMenu,
         panel: Entity<Self>,
@@ -1659,102 +1569,6 @@ impl AgentPanel {
         self.focus_handle(cx).focus(window);
     }
 
-    fn push_tab(
-        &mut self,
-        new_view: ActiveView,
-        agent: AgentType,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let view_identity = Self::view_identity(&new_view, cx);
-
-        if let Some(identity) = view_identity.as_ref() {
-            if let Some(existing_id) = self.find_tab_by_identity(identity, cx) {
-                self.set_active_tab_by_id(existing_id, window, cx);
-                return;
-            }
-        }
-
-        match &new_view {
-            ActiveView::TextThread { .. } | ActiveView::ExternalAgentThread { .. } => {
-                self.tabs.push(AgentPanelTab::new(new_view, agent));
-                let new_id = self.tabs.len() - 1;
-                self.set_active_tab_by_id(new_id, window, cx);
-
-                if let Some(pending_id) = self.pending_tab_removal.take() {
-                    // Now that we have more than one tab, try removing the deferred one.
-                    if self.tabs.len() > 1 {
-                        self.remove_tab_by_id(pending_id, window, cx);
-                    } else {
-                        self.pending_tab_removal = Some(pending_id);
-                    }
-                }
-            }
-            ActiveView::History | ActiveView::Configuration => {
-                self.set_overlay_view(new_view, window, cx);
-            }
-        }
-    }
-
-    fn remove_tab_by_id(&mut self, id: TabId, window: &mut Window, cx: &mut Context<Self>) {
-        // Guardrail - ensure we have at least one item in the list
-        if self.tabs.len() == 1 {
-            if self.loading && self.tabs.get(id).is_some() {
-                self.pending_tab_removal = Some(id);
-                log::info!(
-                    "Deferring removal of tab {id} until another tab is available (panel loading)."
-                );
-            } else {
-                log::info!("Failed to remove the tab! The tabs list only has one item left.");
-            }
-            return;
-        }
-
-        if self.tabs.get(id).is_some() {
-            let removed_id = id;
-            self.tabs.remove(removed_id);
-            let new_id = if self.active_tab_id == removed_id {
-                removed_id.min(self.tabs.len() - 1)
-            } else if self.active_tab_id > removed_id {
-                self.active_tab_id - 1
-            } else {
-                self.active_tab_id
-            };
-
-            if let Some(edit_id) = self.title_edit_overlay_tab_id {
-                if edit_id == removed_id {
-                    self.title_edit_overlay_tab_id = None;
-                } else if edit_id > removed_id {
-                    self.title_edit_overlay_tab_id = Some(edit_id - 1);
-                }
-            }
-
-            if new_id == self.active_tab_id {
-                self.tab_bar_scroll_handle.scroll_to_item(new_id);
-            } else {
-                self.set_active_tab_by_id(new_id, window, cx);
-            }
-        } else {
-            log::info!("View id is not valid.");
-        }
-    }
-
-    fn display_tab_label(
-        title: impl Into<SharedString>,
-        is_active: bool,
-    ) -> (SharedString, Option<SharedString>) {
-        const MAX_CHARS: usize = 20;
-
-        let title: SharedString = title.into();
-
-        if is_active || title.chars().count() <= MAX_CHARS {
-            (title, None)
-        } else {
-            let preview: String = title.chars().take(MAX_CHARS).collect();
-            (format!("{preview}...").into(), Some(title))
-        }
-    }
-
     fn focus_active_panel_thread(&self, window: &mut Window, cx: &mut Context<Self>) {
         match self.active_view() {
             ActiveView::ExternalAgentThread { thread_view } => {
@@ -1906,177 +1720,6 @@ impl Panel for AgentPanel {
 }
 
 impl AgentPanel {
-    fn render_tab_label(
-        &self,
-        view: &ActiveView,
-        is_active: bool,
-        cx: &mut Context<Self>,
-    ) -> TabLabelRender {
-        match view {
-            ActiveView::ExternalAgentThread { thread_view } => {
-                let text = thread_view
-                    .read(cx)
-                    .title_editor()
-                    .as_ref()
-                    .map(|editor| editor.read(cx).text(cx))
-                    .filter(|text| !text.is_empty())
-                    .unwrap_or_else(|| thread_view.read(cx).title(cx).to_string().into());
-
-                let (label_text, tooltip) = Self::display_tab_label(text, is_active);
-
-                let is_generating = thread_view
-                    .read(cx)
-                    .thread()
-                    .map(|thread| thread.read(cx).status() == ThreadStatus::Generating)
-                    .unwrap_or(false);
-
-                let label = if is_generating {
-                    Label::new(label_text)
-                        .truncate()
-                        .when(!is_active, |label| label.color(Color::Muted))
-                        .with_animation(
-                            "pulsating-tab-label",
-                            Animation::new(Duration::from_secs(2))
-                                .repeat()
-                                .with_easing(pulsating_between(0.4, 0.8)),
-                            |label, delta| label.alpha(delta),
-                        )
-                        .into_any_element()
-                } else {
-                    Label::new(label_text)
-                        .truncate()
-                        .when(!is_active, |label| label.color(Color::Muted))
-                        .into_any_element()
-                };
-
-                TabLabelRender {
-                    element: label,
-                    tooltip,
-                }
-            }
-            ActiveView::TextThread {
-                title_editor,
-                text_thread_editor,
-                ..
-            } => {
-                let summary = text_thread_editor.read(cx).text_thread().read(cx).summary();
-
-                let is_generating = text_thread_editor
-                    .read(cx)
-                    .text_thread()
-                    .read(cx)
-                    .messages(cx)
-                    .any(|message| message.status == assistant_text_thread::MessageStatus::Pending);
-
-                match summary {
-                    TextThreadSummary::Pending => {
-                        let label = if is_generating {
-                            Label::new(TextThreadSummary::DEFAULT)
-                                .truncate()
-                                .when(!is_active, |label| label.color(Color::Muted))
-                                .with_animation(
-                                    "pulsating-tab-label",
-                                    Animation::new(Duration::from_secs(2))
-                                        .repeat()
-                                        .with_easing(pulsating_between(0.4, 0.8)),
-                                    |label, delta| label.alpha(delta),
-                                )
-                                .into_any_element()
-                        } else {
-                            Label::new(TextThreadSummary::DEFAULT)
-                                .color(Color::Muted)
-                                .truncate()
-                                .when(!is_active, |label| label.color(Color::Muted))
-                                .into_any_element()
-                        };
-
-                        TabLabelRender {
-                            element: label,
-                            tooltip: None,
-                        }
-                    }
-                    TextThreadSummary::Content(summary) => {
-                        if summary.done {
-                            let mut text = title_editor.read(cx).text(cx);
-                            if text.is_empty() {
-                                text = summary.text.clone().into();
-                            }
-                            let (label_text, tooltip) = Self::display_tab_label(text, is_active);
-
-                            let label = if is_generating {
-                                Label::new(label_text)
-                                    .truncate()
-                                    .when(!is_active, |label| label.color(Color::Muted))
-                                    .with_animation(
-                                        "pulsating-tab-label",
-                                        Animation::new(Duration::from_secs(2))
-                                            .repeat()
-                                            .with_easing(pulsating_between(0.4, 0.8)),
-                                        |label, delta| label.alpha(delta),
-                                    )
-                                    .into_any_element()
-                            } else {
-                                Label::new(label_text)
-                                    .truncate()
-                                    .when(!is_active, |label| label.color(Color::Muted))
-                                    .into_any_element()
-                            };
-
-                            TabLabelRender {
-                                element: label,
-                                tooltip,
-                            }
-                        } else {
-                            TabLabelRender {
-                                element: Label::new(LOADING_SUMMARY_PLACEHOLDER)
-                                    .truncate()
-                                    .color(Color::Muted)
-                                    .into_any_element(),
-                                tooltip: None,
-                            }
-                        }
-                    }
-                    TextThreadSummary::Error => {
-                        let text = title_editor.read(cx).text(cx);
-                        let (label_text, tooltip) = Self::display_tab_label(text, is_active);
-
-                        let label = if is_generating {
-                            Label::new(label_text)
-                                .truncate()
-                                .when(!is_active, |label| label.color(Color::Muted))
-                                .with_animation(
-                                    "pulsating-tab-label",
-                                    Animation::new(Duration::from_secs(2))
-                                        .repeat()
-                                        .with_easing(pulsating_between(0.4, 0.8)),
-                                    |label, delta| label.alpha(delta),
-                                )
-                                .into_any_element()
-                        } else {
-                            Label::new(label_text)
-                                .truncate()
-                                .when(!is_active, |label| label.color(Color::Muted))
-                                .into_any_element()
-                        };
-
-                        TabLabelRender {
-                            element: label,
-                            tooltip,
-                        }
-                    }
-                }
-            }
-            ActiveView::History => TabLabelRender {
-                element: Label::new("History").truncate().into_any_element(),
-                tooltip: None,
-            },
-            ActiveView::Configuration => TabLabelRender {
-                element: Label::new("Settings").truncate().into_any_element(),
-                tooltip: None,
-            },
-        }
-    }
-
     fn render_overlay_title_editor(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let tab_id = self.title_edit_overlay_tab_id?;
         let tab = self.tabs.get(tab_id)?;
@@ -2356,6 +1999,671 @@ impl AgentPanel {
                     Tooltip::for_action_in("Go Back", &workspace::GoBack, &focus_handle, cx)
                 }
             })
+    }
+
+    fn should_render_trial_end_upsell(&self, cx: &mut Context<Self>) -> bool {
+        if TrialEndUpsell::dismissed() {
+            return false;
+        }
+
+        match self.active_view() {
+            ActiveView::TextThread { .. } => {
+                if LanguageModelRegistry::global(cx)
+                    .read(cx)
+                    .default_model()
+                    .is_some_and(|model| {
+                        model.provider.id() != language_model::ZED_CLOUD_PROVIDER_ID
+                    })
+                {
+                    return false;
+                }
+            }
+            ActiveView::ExternalAgentThread { .. }
+            | ActiveView::History
+            | ActiveView::Configuration => return false,
+        }
+
+        let plan = self.user_store.read(cx).plan();
+        let has_previous_trial = self.user_store.read(cx).trial_started_at().is_some();
+
+        matches!(
+            plan,
+            Some(Plan::V1(PlanV1::ZedFree) | Plan::V2(PlanV2::ZedFree))
+        ) && has_previous_trial
+    }
+
+    fn should_render_onboarding(&self, cx: &mut Context<Self>) -> bool {
+        if OnboardingUpsell::dismissed() {
+            return false;
+        }
+
+        let user_store = self.user_store.read(cx);
+
+        if user_store
+            .plan()
+            .is_some_and(|plan| matches!(plan, Plan::V1(PlanV1::ZedPro) | Plan::V2(PlanV2::ZedPro)))
+            && user_store
+                .subscription_period()
+                .and_then(|period| period.0.checked_add_days(chrono::Days::new(1)))
+                .is_some_and(|date| date < chrono::Utc::now())
+        {
+            OnboardingUpsell::set_dismissed(true, cx);
+            return false;
+        }
+
+        match self.active_view() {
+            ActiveView::History | ActiveView::Configuration => false,
+            ActiveView::ExternalAgentThread { thread_view, .. }
+                if thread_view.read(cx).as_native_thread(cx).is_none() =>
+            {
+                false
+            }
+            _ => {
+                let history_is_empty = self.history_store.read(cx).is_empty(cx);
+
+                let has_configured_non_zed_providers = LanguageModelRegistry::read_global(cx)
+                    .providers()
+                    .iter()
+                    .any(|provider| {
+                        provider.is_authenticated(cx)
+                            && provider.id() != language_model::ZED_CLOUD_PROVIDER_ID
+                    });
+
+                history_is_empty || !has_configured_non_zed_providers
+            }
+        }
+    }
+
+    fn render_onboarding(
+        &self,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<impl IntoElement> {
+        if !self.should_render_onboarding(cx) {
+            return None;
+        }
+
+        let text_thread_view = matches!(self.active_view(), ActiveView::TextThread { .. });
+
+        Some(
+            div()
+                .when(text_thread_view, |this| {
+                    this.bg(cx.theme().colors().editor_background)
+                })
+                .child(self.onboarding.clone()),
+        )
+    }
+
+    fn render_trial_end_upsell(
+        &self,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<impl IntoElement> {
+        if !self.should_render_trial_end_upsell(cx) {
+            return None;
+        }
+
+        let plan = self.user_store.read(cx).plan()?;
+
+        Some(
+            v_flex()
+                .absolute()
+                .inset_0()
+                .size_full()
+                .bg(cx.theme().colors().panel_background)
+                .opacity(0.85)
+                .block_mouse_except_scroll()
+                .child(EndTrialUpsell::new(
+                    plan,
+                    Arc::new({
+                        let this = cx.entity();
+                        move |_, cx| {
+                            this.update(cx, |_this, cx| {
+                                TrialEndUpsell::set_dismissed(true, cx);
+                                cx.notify();
+                            });
+                        }
+                    }),
+                )),
+        )
+    }
+
+    fn render_configuration_error(
+        &self,
+        border_bottom: bool,
+        configuration_error: &ConfigurationError,
+        focus_handle: &FocusHandle,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        let zed_provider_configured = AgentSettings::get_global(cx)
+            .default_model
+            .as_ref()
+            .is_some_and(|selection| selection.provider.0.as_str() == "zed.dev");
+
+        let callout = if zed_provider_configured {
+            Callout::new()
+                .icon(IconName::Warning)
+                .severity(Severity::Warning)
+                .when(border_bottom, |this| {
+                    this.border_position(ui::BorderPosition::Bottom)
+                })
+                .title("Sign in to continue using Zed as your LLM provider.")
+                .actions_slot(
+                    Button::new("sign_in", "Sign In")
+                        .style(ButtonStyle::Tinted(ui::TintColor::Warning))
+                        .label_size(LabelSize::Small)
+                        .on_click({
+                            let workspace = self.workspace.clone();
+                            move |_, _, cx| {
+                                let Ok(client) =
+                                    workspace.update(cx, |workspace, _| workspace.client().clone())
+                                else {
+                                    return;
+                                };
+
+                                cx.spawn(async move |cx| {
+                                    client.sign_in_with_optional_connect(true, cx).await
+                                })
+                                .detach_and_log_err(cx);
+                            }
+                        }),
+                )
+        } else {
+            Callout::new()
+                .icon(IconName::Warning)
+                .severity(Severity::Warning)
+                .when(border_bottom, |this| {
+                    this.border_position(ui::BorderPosition::Bottom)
+                })
+                .title(configuration_error.to_string())
+                .actions_slot(
+                    Button::new("settings", "Configure")
+                        .style(ButtonStyle::Tinted(ui::TintColor::Warning))
+                        .label_size(LabelSize::Small)
+                        .key_binding(
+                            KeyBinding::for_action_in(&OpenSettings, focus_handle, cx)
+                                .map(|kb| kb.size(rems_from_px(12.))),
+                        )
+                        .on_click(|_event, window, cx| {
+                            window.dispatch_action(OpenSettings.boxed_clone(), cx)
+                        }),
+                )
+        };
+
+        match configuration_error {
+            ConfigurationError::ModelNotFound
+            | ConfigurationError::ProviderNotAuthenticated(_)
+            | ConfigurationError::NoProvider => callout.into_any_element(),
+        }
+    }
+
+    fn render_text_thread(
+        &self,
+        text_thread_editor: &Entity<TextThreadEditor>,
+        buffer_search_bar: &Entity<BufferSearchBar>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let mut registrar = buffer_search::DivRegistrar::new(
+            |this, _, _cx| match this.active_view() {
+                ActiveView::TextThread {
+                    buffer_search_bar, ..
+                } => Some(buffer_search_bar.clone()),
+                _ => None,
+            },
+            cx,
+        );
+        BufferSearchBar::register(&mut registrar);
+        registrar
+            .into_div()
+            .size_full()
+            .relative()
+            .map(|parent| {
+                buffer_search_bar.update(cx, |buffer_search_bar, cx| {
+                    if buffer_search_bar.is_dismissed() {
+                        return parent;
+                    }
+                    parent.child(
+                        div()
+                            .p(DynamicSpacing::Base08.rems(cx))
+                            .border_b_1()
+                            .border_color(cx.theme().colors().border_variant)
+                            .bg(cx.theme().colors().editor_background)
+                            .child(buffer_search_bar.render(window, cx)),
+                    )
+                })
+            })
+            .child(text_thread_editor.clone())
+            .child(self.render_drag_target(cx))
+    }
+
+    fn render_drag_target(&self, cx: &Context<Self>) -> Div {
+        let is_local = self.project.read(cx).is_local();
+        div()
+            .invisible()
+            .absolute()
+            .top_0()
+            .right_0()
+            .bottom_0()
+            .left_0()
+            .bg(cx.theme().colors().drop_target_background)
+            .drag_over::<DraggedTab>(|this, _, _, _| this.visible())
+            .drag_over::<DraggedSelection>(|this, _, _, _| this.visible())
+            .when(is_local, |this| {
+                this.drag_over::<ExternalPaths>(|this, _, _, _| this.visible())
+            })
+            .on_drop(cx.listener(move |this, tab: &DraggedTab, window, cx| {
+                let item = tab.pane.read(cx).item_for_index(tab.ix);
+                let project_paths = item
+                    .and_then(|item| item.project_path(cx))
+                    .into_iter()
+                    .collect::<Vec<_>>();
+                this.handle_drop(project_paths, vec![], window, cx);
+            }))
+            .on_drop(
+                cx.listener(move |this, selection: &DraggedSelection, window, cx| {
+                    let project_paths = selection
+                        .items()
+                        .filter_map(|item| this.project.read(cx).path_for_entry(item.entry_id, cx))
+                        .collect::<Vec<_>>();
+                    this.handle_drop(project_paths, vec![], window, cx);
+                }),
+            )
+            .on_drop(cx.listener(move |this, paths: &ExternalPaths, window, cx| {
+                let tasks = paths
+                    .paths()
+                    .iter()
+                    .map(|path| {
+                        Workspace::project_path_for_path(this.project.clone(), path, false, cx)
+                    })
+                    .collect::<Vec<_>>();
+                cx.spawn_in(window, async move |this, cx| {
+                    let mut paths = vec![];
+                    let mut added_worktrees = vec![];
+                    let opened_paths = futures::future::join_all(tasks).await;
+                    for entry in opened_paths {
+                        if let Some((worktree, project_path)) = entry.log_err() {
+                            added_worktrees.push(worktree);
+                            paths.push(project_path);
+                        }
+                    }
+                    this.update_in(cx, |this, window, cx| {
+                        this.handle_drop(paths, added_worktrees, window, cx);
+                    })
+                    .ok();
+                })
+                .detach();
+            }))
+    }
+
+    fn handle_drop(
+        &mut self,
+        paths: Vec<ProjectPath>,
+        added_worktrees: Vec<Entity<Worktree>>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match self.active_view() {
+            ActiveView::ExternalAgentThread { thread_view } => {
+                thread_view.update(cx, |thread_view, cx| {
+                    thread_view.insert_dragged_files(paths, added_worktrees, window, cx);
+                });
+            }
+            ActiveView::TextThread {
+                text_thread_editor, ..
+            } => {
+                text_thread_editor.update(cx, |text_thread_editor, cx| {
+                    TextThreadEditor::insert_dragged_files(
+                        text_thread_editor,
+                        paths,
+                        added_worktrees,
+                        window,
+                        cx,
+                    );
+                });
+            }
+            ActiveView::History | ActiveView::Configuration => {}
+        }
+    }
+
+    fn key_context(&self) -> KeyContext {
+        let mut key_context = KeyContext::new_with_defaults();
+        key_context.add("AgentPanel");
+        match self.active_view() {
+            ActiveView::ExternalAgentThread { .. } => key_context.add("acp_thread"),
+            ActiveView::TextThread { .. } => key_context.add("text_thread"),
+            ActiveView::History | ActiveView::Configuration => {}
+        }
+        key_context
+    }
+}
+
+// Methods to manage tabs in AgentPanel
+impl AgentPanel {
+    fn active_tab(&self) -> &AgentPanelTab {
+        self.tabs
+            .get(self.active_tab_id)
+            .unwrap_or_else(|| &self.tabs[0])
+    }
+
+    fn find_tab_by_identity(
+        &self,
+        identity: &AgentPanelTabIdentity,
+        cx: &mut Context<Self>,
+    ) -> Option<TabId> {
+        for (index, tab) in self.tabs.iter().enumerate() {
+            if Self::view_identity(tab.view(), cx).is_some_and(|existing| existing == *identity) {
+                return Some(index);
+            }
+        }
+        None
+    }
+
+    fn set_active_tab_by_id(&mut self, new_id: TabId, window: &mut Window, cx: &mut Context<Self>) {
+        // TODO: need to check the total items in the list, if it is equal to 1, we should overlay it
+        let Some((tab_agent, text_thread_editor)) = self.tabs.get(new_id).map(|tab| {
+            let editor = match tab.view() {
+                ActiveView::TextThread {
+                    text_thread_editor, ..
+                } => Some(text_thread_editor.clone()),
+                _ => None,
+            };
+            (tab.agent().clone(), editor)
+        }) else {
+            log::info!("The input new_id is not in the list views!");
+            return;
+        };
+
+        self.overlay_view = None;
+        self.overlay_previous_tab_id = None;
+        self.title_edit_overlay_tab_id = None;
+        self.active_tab_id = new_id;
+        self.tab_bar_scroll_handle.scroll_to_item(new_id);
+
+        if self.selected_agent != tab_agent {
+            self.selected_agent = tab_agent.clone();
+            self.serialize(cx);
+        }
+
+        if let Some(text_thread_editor) = text_thread_editor {
+            self.history_store.update(cx, |store, cx| {
+                if let Some(path) = text_thread_editor.read(cx).text_thread().read(cx).path() {
+                    store.push_recently_opened_entry(
+                        agent::HistoryEntryId::TextThread(path.clone()),
+                        cx,
+                    )
+                }
+            });
+        }
+
+        self.focus_handle(cx).focus(window);
+    }
+
+    fn push_tab(
+        &mut self,
+        new_view: ActiveView,
+        agent: AgentType,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let view_identity = Self::view_identity(&new_view, cx);
+
+        if let Some(identity) = view_identity.as_ref() {
+            if let Some(existing_id) = self.find_tab_by_identity(identity, cx) {
+                self.set_active_tab_by_id(existing_id, window, cx);
+                return;
+            }
+        }
+
+        match &new_view {
+            ActiveView::TextThread { .. } | ActiveView::ExternalAgentThread { .. } => {
+                self.tabs.push(AgentPanelTab::new(new_view, agent));
+                let new_id = self.tabs.len() - 1;
+                self.set_active_tab_by_id(new_id, window, cx);
+
+                if let Some(pending_id) = self.pending_tab_removal.take() {
+                    // Now that we have more than one tab, try removing the deferred one.
+                    if self.tabs.len() > 1 {
+                        self.remove_tab_by_id(pending_id, window, cx);
+                    } else {
+                        self.pending_tab_removal = Some(pending_id);
+                    }
+                }
+            }
+            ActiveView::History | ActiveView::Configuration => {
+                self.set_overlay_view(new_view, window, cx);
+            }
+        }
+    }
+
+    fn remove_tab_by_id(&mut self, id: TabId, window: &mut Window, cx: &mut Context<Self>) {
+        // Guardrail - ensure we have at least one item in the list
+        if self.tabs.len() == 1 {
+            if self.loading && self.tabs.get(id).is_some() {
+                self.pending_tab_removal = Some(id);
+                log::info!(
+                    "Deferring removal of tab {id} until another tab is available (panel loading)."
+                );
+            } else {
+                log::info!("Failed to remove the tab! The tabs list only has one item left.");
+            }
+            return;
+        }
+
+        if self.tabs.get(id).is_some() {
+            let removed_id = id;
+            self.tabs.remove(removed_id);
+            let new_id = if self.active_tab_id == removed_id {
+                removed_id.min(self.tabs.len() - 1)
+            } else if self.active_tab_id > removed_id {
+                self.active_tab_id - 1
+            } else {
+                self.active_tab_id
+            };
+
+            if let Some(edit_id) = self.title_edit_overlay_tab_id {
+                if edit_id == removed_id {
+                    self.title_edit_overlay_tab_id = None;
+                } else if edit_id > removed_id {
+                    self.title_edit_overlay_tab_id = Some(edit_id - 1);
+                }
+            }
+
+            if new_id == self.active_tab_id {
+                self.tab_bar_scroll_handle.scroll_to_item(new_id);
+            } else {
+                self.set_active_tab_by_id(new_id, window, cx);
+            }
+        } else {
+            log::info!("View id is not valid.");
+        }
+    }
+
+    fn display_tab_label(
+        title: impl Into<SharedString>,
+        is_active: bool,
+    ) -> (SharedString, Option<SharedString>) {
+        const MAX_CHARS: usize = 20;
+
+        let title: SharedString = title.into();
+
+        if is_active || title.chars().count() <= MAX_CHARS {
+            (title, None)
+        } else {
+            let preview: String = title.chars().take(MAX_CHARS).collect();
+            (format!("{preview}...").into(), Some(title))
+        }
+    }
+
+    fn render_tab_label(
+        &self,
+        view: &ActiveView,
+        is_active: bool,
+        cx: &mut Context<Self>,
+    ) -> TabLabelRender {
+        match view {
+            ActiveView::ExternalAgentThread { thread_view } => {
+                let text = thread_view
+                    .read(cx)
+                    .title_editor()
+                    .as_ref()
+                    .map(|editor| editor.read(cx).text(cx))
+                    .filter(|text| !text.is_empty())
+                    .unwrap_or_else(|| thread_view.read(cx).title(cx).to_string().into());
+
+                let (label_text, tooltip) = Self::display_tab_label(text, is_active);
+
+                let is_generating = thread_view
+                    .read(cx)
+                    .thread()
+                    .map(|thread| thread.read(cx).status() == ThreadStatus::Generating)
+                    .unwrap_or(false);
+
+                let label = if is_generating {
+                    Label::new(label_text)
+                        .truncate()
+                        .when(!is_active, |label| label.color(Color::Muted))
+                        .with_animation(
+                            "pulsating-tab-label",
+                            Animation::new(Duration::from_secs(2))
+                                .repeat()
+                                .with_easing(pulsating_between(0.4, 0.8)),
+                            |label, delta| label.alpha(delta),
+                        )
+                        .into_any_element()
+                } else {
+                    Label::new(label_text)
+                        .truncate()
+                        .when(!is_active, |label| label.color(Color::Muted))
+                        .into_any_element()
+                };
+
+                TabLabelRender {
+                    element: label,
+                    tooltip,
+                }
+            }
+            ActiveView::TextThread {
+                title_editor,
+                text_thread_editor,
+                ..
+            } => {
+                let summary = text_thread_editor.read(cx).text_thread().read(cx).summary();
+
+                let is_generating = text_thread_editor
+                    .read(cx)
+                    .text_thread()
+                    .read(cx)
+                    .messages(cx)
+                    .any(|message| message.status == assistant_text_thread::MessageStatus::Pending);
+
+                match summary {
+                    TextThreadSummary::Pending => {
+                        let label = if is_generating {
+                            Label::new(TextThreadSummary::DEFAULT)
+                                .truncate()
+                                .when(!is_active, |label| label.color(Color::Muted))
+                                .with_animation(
+                                    "pulsating-tab-label",
+                                    Animation::new(Duration::from_secs(2))
+                                        .repeat()
+                                        .with_easing(pulsating_between(0.4, 0.8)),
+                                    |label, delta| label.alpha(delta),
+                                )
+                                .into_any_element()
+                        } else {
+                            Label::new(TextThreadSummary::DEFAULT)
+                                .color(Color::Muted)
+                                .truncate()
+                                .when(!is_active, |label| label.color(Color::Muted))
+                                .into_any_element()
+                        };
+
+                        TabLabelRender {
+                            element: label,
+                            tooltip: None,
+                        }
+                    }
+                    TextThreadSummary::Content(summary) => {
+                        if summary.done {
+                            let mut text = title_editor.read(cx).text(cx);
+                            if text.is_empty() {
+                                text = summary.text.clone().into();
+                            }
+                            let (label_text, tooltip) = Self::display_tab_label(text, is_active);
+
+                            let label = if is_generating {
+                                Label::new(label_text)
+                                    .truncate()
+                                    .when(!is_active, |label| label.color(Color::Muted))
+                                    .with_animation(
+                                        "pulsating-tab-label",
+                                        Animation::new(Duration::from_secs(2))
+                                            .repeat()
+                                            .with_easing(pulsating_between(0.4, 0.8)),
+                                        |label, delta| label.alpha(delta),
+                                    )
+                                    .into_any_element()
+                            } else {
+                                Label::new(label_text)
+                                    .truncate()
+                                    .when(!is_active, |label| label.color(Color::Muted))
+                                    .into_any_element()
+                            };
+
+                            TabLabelRender {
+                                element: label,
+                                tooltip,
+                            }
+                        } else {
+                            TabLabelRender {
+                                element: Label::new(LOADING_SUMMARY_PLACEHOLDER)
+                                    .truncate()
+                                    .color(Color::Muted)
+                                    .into_any_element(),
+                                tooltip: None,
+                            }
+                        }
+                    }
+                    TextThreadSummary::Error => {
+                        let text = title_editor.read(cx).text(cx);
+                        let (label_text, tooltip) = Self::display_tab_label(text, is_active);
+
+                        let label = if is_generating {
+                            Label::new(label_text)
+                                .truncate()
+                                .when(!is_active, |label| label.color(Color::Muted))
+                                .with_animation(
+                                    "pulsating-tab-label",
+                                    Animation::new(Duration::from_secs(2))
+                                        .repeat()
+                                        .with_easing(pulsating_between(0.4, 0.8)),
+                                    |label, delta| label.alpha(delta),
+                                )
+                                .into_any_element()
+                        } else {
+                            Label::new(label_text)
+                                .truncate()
+                                .when(!is_active, |label| label.color(Color::Muted))
+                                .into_any_element()
+                        };
+
+                        TabLabelRender {
+                            element: label,
+                            tooltip,
+                        }
+                    }
+                }
+            }
+            ActiveView::History => TabLabelRender {
+                element: Label::new("History").truncate().into_any_element(),
+                tooltip: None,
+            },
+            ActiveView::Configuration => TabLabelRender {
+                element: Label::new("Settings").truncate().into_any_element(),
+                tooltip: None,
+            },
+        }
     }
 
     fn render_tab_agent_icon(
@@ -2777,342 +3085,6 @@ impl AgentPanel {
         }
 
         tab_bar.into_any_element()
-    }
-
-    fn should_render_trial_end_upsell(&self, cx: &mut Context<Self>) -> bool {
-        if TrialEndUpsell::dismissed() {
-            return false;
-        }
-
-        match self.active_view() {
-            ActiveView::TextThread { .. } => {
-                if LanguageModelRegistry::global(cx)
-                    .read(cx)
-                    .default_model()
-                    .is_some_and(|model| {
-                        model.provider.id() != language_model::ZED_CLOUD_PROVIDER_ID
-                    })
-                {
-                    return false;
-                }
-            }
-            ActiveView::ExternalAgentThread { .. }
-            | ActiveView::History
-            | ActiveView::Configuration => return false,
-        }
-
-        let plan = self.user_store.read(cx).plan();
-        let has_previous_trial = self.user_store.read(cx).trial_started_at().is_some();
-
-        matches!(
-            plan,
-            Some(Plan::V1(PlanV1::ZedFree) | Plan::V2(PlanV2::ZedFree))
-        ) && has_previous_trial
-    }
-
-    fn should_render_onboarding(&self, cx: &mut Context<Self>) -> bool {
-        if OnboardingUpsell::dismissed() {
-            return false;
-        }
-
-        let user_store = self.user_store.read(cx);
-
-        if user_store
-            .plan()
-            .is_some_and(|plan| matches!(plan, Plan::V1(PlanV1::ZedPro) | Plan::V2(PlanV2::ZedPro)))
-            && user_store
-                .subscription_period()
-                .and_then(|period| period.0.checked_add_days(chrono::Days::new(1)))
-                .is_some_and(|date| date < chrono::Utc::now())
-        {
-            OnboardingUpsell::set_dismissed(true, cx);
-            return false;
-        }
-
-        match self.active_view() {
-            ActiveView::History | ActiveView::Configuration => false,
-            ActiveView::ExternalAgentThread { thread_view, .. }
-                if thread_view.read(cx).as_native_thread(cx).is_none() =>
-            {
-                false
-            }
-            _ => {
-                let history_is_empty = self.history_store.read(cx).is_empty(cx);
-
-                let has_configured_non_zed_providers = LanguageModelRegistry::read_global(cx)
-                    .providers()
-                    .iter()
-                    .any(|provider| {
-                        provider.is_authenticated(cx)
-                            && provider.id() != language_model::ZED_CLOUD_PROVIDER_ID
-                    });
-
-                history_is_empty || !has_configured_non_zed_providers
-            }
-        }
-    }
-
-    fn render_onboarding(
-        &self,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Option<impl IntoElement> {
-        if !self.should_render_onboarding(cx) {
-            return None;
-        }
-
-        let text_thread_view = matches!(self.active_view(), ActiveView::TextThread { .. });
-
-        Some(
-            div()
-                .when(text_thread_view, |this| {
-                    this.bg(cx.theme().colors().editor_background)
-                })
-                .child(self.onboarding.clone()),
-        )
-    }
-
-    fn render_trial_end_upsell(
-        &self,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Option<impl IntoElement> {
-        if !self.should_render_trial_end_upsell(cx) {
-            return None;
-        }
-
-        let plan = self.user_store.read(cx).plan()?;
-
-        Some(
-            v_flex()
-                .absolute()
-                .inset_0()
-                .size_full()
-                .bg(cx.theme().colors().panel_background)
-                .opacity(0.85)
-                .block_mouse_except_scroll()
-                .child(EndTrialUpsell::new(
-                    plan,
-                    Arc::new({
-                        let this = cx.entity();
-                        move |_, cx| {
-                            this.update(cx, |_this, cx| {
-                                TrialEndUpsell::set_dismissed(true, cx);
-                                cx.notify();
-                            });
-                        }
-                    }),
-                )),
-        )
-    }
-
-    fn render_configuration_error(
-        &self,
-        border_bottom: bool,
-        configuration_error: &ConfigurationError,
-        focus_handle: &FocusHandle,
-        cx: &mut App,
-    ) -> impl IntoElement {
-        let zed_provider_configured = AgentSettings::get_global(cx)
-            .default_model
-            .as_ref()
-            .is_some_and(|selection| selection.provider.0.as_str() == "zed.dev");
-
-        let callout = if zed_provider_configured {
-            Callout::new()
-                .icon(IconName::Warning)
-                .severity(Severity::Warning)
-                .when(border_bottom, |this| {
-                    this.border_position(ui::BorderPosition::Bottom)
-                })
-                .title("Sign in to continue using Zed as your LLM provider.")
-                .actions_slot(
-                    Button::new("sign_in", "Sign In")
-                        .style(ButtonStyle::Tinted(ui::TintColor::Warning))
-                        .label_size(LabelSize::Small)
-                        .on_click({
-                            let workspace = self.workspace.clone();
-                            move |_, _, cx| {
-                                let Ok(client) =
-                                    workspace.update(cx, |workspace, _| workspace.client().clone())
-                                else {
-                                    return;
-                                };
-
-                                cx.spawn(async move |cx| {
-                                    client.sign_in_with_optional_connect(true, cx).await
-                                })
-                                .detach_and_log_err(cx);
-                            }
-                        }),
-                )
-        } else {
-            Callout::new()
-                .icon(IconName::Warning)
-                .severity(Severity::Warning)
-                .when(border_bottom, |this| {
-                    this.border_position(ui::BorderPosition::Bottom)
-                })
-                .title(configuration_error.to_string())
-                .actions_slot(
-                    Button::new("settings", "Configure")
-                        .style(ButtonStyle::Tinted(ui::TintColor::Warning))
-                        .label_size(LabelSize::Small)
-                        .key_binding(
-                            KeyBinding::for_action_in(&OpenSettings, focus_handle, cx)
-                                .map(|kb| kb.size(rems_from_px(12.))),
-                        )
-                        .on_click(|_event, window, cx| {
-                            window.dispatch_action(OpenSettings.boxed_clone(), cx)
-                        }),
-                )
-        };
-
-        match configuration_error {
-            ConfigurationError::ModelNotFound
-            | ConfigurationError::ProviderNotAuthenticated(_)
-            | ConfigurationError::NoProvider => callout.into_any_element(),
-        }
-    }
-
-    fn render_text_thread(
-        &self,
-        text_thread_editor: &Entity<TextThreadEditor>,
-        buffer_search_bar: &Entity<BufferSearchBar>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Div {
-        let mut registrar = buffer_search::DivRegistrar::new(
-            |this, _, _cx| match this.active_view() {
-                ActiveView::TextThread {
-                    buffer_search_bar, ..
-                } => Some(buffer_search_bar.clone()),
-                _ => None,
-            },
-            cx,
-        );
-        BufferSearchBar::register(&mut registrar);
-        registrar
-            .into_div()
-            .size_full()
-            .relative()
-            .map(|parent| {
-                buffer_search_bar.update(cx, |buffer_search_bar, cx| {
-                    if buffer_search_bar.is_dismissed() {
-                        return parent;
-                    }
-                    parent.child(
-                        div()
-                            .p(DynamicSpacing::Base08.rems(cx))
-                            .border_b_1()
-                            .border_color(cx.theme().colors().border_variant)
-                            .bg(cx.theme().colors().editor_background)
-                            .child(buffer_search_bar.render(window, cx)),
-                    )
-                })
-            })
-            .child(text_thread_editor.clone())
-            .child(self.render_drag_target(cx))
-    }
-
-    fn render_drag_target(&self, cx: &Context<Self>) -> Div {
-        let is_local = self.project.read(cx).is_local();
-        div()
-            .invisible()
-            .absolute()
-            .top_0()
-            .right_0()
-            .bottom_0()
-            .left_0()
-            .bg(cx.theme().colors().drop_target_background)
-            .drag_over::<DraggedTab>(|this, _, _, _| this.visible())
-            .drag_over::<DraggedSelection>(|this, _, _, _| this.visible())
-            .when(is_local, |this| {
-                this.drag_over::<ExternalPaths>(|this, _, _, _| this.visible())
-            })
-            .on_drop(cx.listener(move |this, tab: &DraggedTab, window, cx| {
-                let item = tab.pane.read(cx).item_for_index(tab.ix);
-                let project_paths = item
-                    .and_then(|item| item.project_path(cx))
-                    .into_iter()
-                    .collect::<Vec<_>>();
-                this.handle_drop(project_paths, vec![], window, cx);
-            }))
-            .on_drop(
-                cx.listener(move |this, selection: &DraggedSelection, window, cx| {
-                    let project_paths = selection
-                        .items()
-                        .filter_map(|item| this.project.read(cx).path_for_entry(item.entry_id, cx))
-                        .collect::<Vec<_>>();
-                    this.handle_drop(project_paths, vec![], window, cx);
-                }),
-            )
-            .on_drop(cx.listener(move |this, paths: &ExternalPaths, window, cx| {
-                let tasks = paths
-                    .paths()
-                    .iter()
-                    .map(|path| {
-                        Workspace::project_path_for_path(this.project.clone(), path, false, cx)
-                    })
-                    .collect::<Vec<_>>();
-                cx.spawn_in(window, async move |this, cx| {
-                    let mut paths = vec![];
-                    let mut added_worktrees = vec![];
-                    let opened_paths = futures::future::join_all(tasks).await;
-                    for entry in opened_paths {
-                        if let Some((worktree, project_path)) = entry.log_err() {
-                            added_worktrees.push(worktree);
-                            paths.push(project_path);
-                        }
-                    }
-                    this.update_in(cx, |this, window, cx| {
-                        this.handle_drop(paths, added_worktrees, window, cx);
-                    })
-                    .ok();
-                })
-                .detach();
-            }))
-    }
-
-    fn handle_drop(
-        &mut self,
-        paths: Vec<ProjectPath>,
-        added_worktrees: Vec<Entity<Worktree>>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        match self.active_view() {
-            ActiveView::ExternalAgentThread { thread_view } => {
-                thread_view.update(cx, |thread_view, cx| {
-                    thread_view.insert_dragged_files(paths, added_worktrees, window, cx);
-                });
-            }
-            ActiveView::TextThread {
-                text_thread_editor, ..
-            } => {
-                text_thread_editor.update(cx, |text_thread_editor, cx| {
-                    TextThreadEditor::insert_dragged_files(
-                        text_thread_editor,
-                        paths,
-                        added_worktrees,
-                        window,
-                        cx,
-                    );
-                });
-            }
-            ActiveView::History | ActiveView::Configuration => {}
-        }
-    }
-
-    fn key_context(&self) -> KeyContext {
-        let mut key_context = KeyContext::new_with_defaults();
-        key_context.add("AgentPanel");
-        match self.active_view() {
-            ActiveView::ExternalAgentThread { .. } => key_context.add("acp_thread"),
-            ActiveView::TextThread { .. } => key_context.add("text_thread"),
-            ActiveView::History | ActiveView::Configuration => {}
-        }
-        key_context
     }
 }
 
