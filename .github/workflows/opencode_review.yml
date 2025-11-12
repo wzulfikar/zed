@@ -40,19 +40,4 @@ jobs:
             -f 'side=RIGHT' \
             $@"
 
-          opencode run -m $OPENCODE_MODEL "A new pull request has been created: '${{ github.event.pull_request.title }}'
-
-          <pr-description>
-          ${{ github.event.pull_request.body }}
-          </pr-description>
-
-          Please check all the code changes in this pull request against the guidelines in '.rules' file in this repository. Diffs are important but make sure you read the entire file to get proper context. Make it clear the suggestions are merely suggestions and the human can decide what to do
-
-          Use the 'post_pr_comment' create comments on the files for the violations. Try to leave the comment on the exact line number. If you have a suggested fix include it in a suggestion code block.
-
-          Command MUST be like this:
-          ```
-          post_pr_comment -f 'body=[summary of issue]' -f 'path=[path-to-file]' -F 'line=[line]'
-          ```
-
-          Only create comments for actual violations. If the code follows all guidelines, don't run any 'post_pr_comment'."
+          opencode run -m $OPENCODE_MODEL "run 'post_pr_comment hello'"
