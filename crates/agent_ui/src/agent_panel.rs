@@ -2173,9 +2173,14 @@ impl AgentPanel {
                 .h(Tab::content_height(cx))
                 .px(DynamicSpacing::Base04.px(cx))
                 .gap(DynamicSpacing::Base04.rems(cx))
-                .bg(cx.theme().colors().panel_background)
+                .bg(cx.theme().colors().tab_bar_background)
                 .border_0()
                 .child(h_flex().flex_grow().items_center().child(content))
+                .child(
+                    Icon::new(IconName::Return)
+                        .size(IconSize::Small)
+                        .color(Color::Muted),
+                )
                 .on_action(cx.listener(|this, _: &Confirm, window, cx| {
                     if this.title_edit_overlay_tab_id.take().is_some() {
                         this.focus_active_panel_thread(window, cx);
@@ -2708,6 +2713,7 @@ impl AgentPanel {
                 .h(Tab::content_height(cx))
                 .px(DynamicSpacing::Base04.px(cx))
                 .gap(DynamicSpacing::Base04.rems(cx))
+                .bg(cx.theme().colors().tab_bar_background)
                 .child(self.render_toolbar_back_button(cx).into_any_element())
                 .child(overlay_label)
                 .into_any_element();
