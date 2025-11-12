@@ -22,7 +22,7 @@ jobs:
 
       - name: Review PR
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENCODE_MODEL: "zai-coding-plan/glm-4.6"
           OPENCODE_PERMISSION: '{ "bash": { "./post_pr_comment*": "allow", "gh*": "allow", "gh api*": "deny", "gh pr review*": "deny", "*": "deny" } }'
