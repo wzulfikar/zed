@@ -36,7 +36,7 @@ jobs:
             /repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
             -f 'commit_id=${{ github.event.pull_request.head.sha }}' \
             -f 'side=RIGHT' \
-            -f "path=$1" -F "line=$2" -f 'body='$3''
+            -f "body='$1'" -f "path=$2" -F "line=$3"
           EOF
           chmod +x $PWD/post_pr_comment
 
@@ -66,8 +66,5 @@ jobs:
           - If you have a suggested fix, include it in a suggestion code block.
           - Only create comments for actual violations. If the code follows all guidelines, don't run any 'post_pr_comment'.
           - Command format MUST be like this:
-
-            <command>
-            ./post_pr_comment '[path-to-file]' '[line]' '[summary of issue]'
-            </command>
+            ./post_pr_comment '[comment]' '[path-to-file]' '[line]'
           "
