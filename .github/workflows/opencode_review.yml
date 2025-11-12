@@ -45,4 +45,4 @@ jobs:
           EOF
           chmod +x $HOME/post_pr_comment
 
-          opencode run -m $OPENCODE_MODEL 'run $HOME/post_pr_comment hello'"
+          opencode run -m $OPENCODE_MODEL 'run $HOME/post_pr_comment hello'
