@@ -2333,13 +2333,6 @@ impl AgentPanel {
             })
     }
 
-    fn should_show_tab_bar_controls(&self, window: &Window, cx: &App) -> bool {
-        self.panel_focus_handle.contains_focused(window, cx)
-            || self.new_thread_menu_handle.is_focused(window, cx)
-            || self.agent_navigation_menu_handle.is_focused(window, cx)
-            || self.agent_panel_menu_handle.is_focused(window, cx)
-    }
-
     fn render_toolbar_back_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let focus_handle = self.focus_handle(cx);
 
@@ -2408,7 +2401,6 @@ impl AgentPanel {
         };
 
         let new_thread_menu_store = agent_server_store.clone();
-        let show_tab_bar_controls = self.should_show_tab_bar_controls(window, cx);
         let new_thread_menu = PopoverMenu::new("new_thread_menu")
             .trigger_with_tooltip(
                 IconButton::new("new_thread_menu_btn", IconName::Plus).icon_size(IconSize::Small),
@@ -2695,13 +2687,10 @@ impl AgentPanel {
             .child(self.render_panel_options_menu(window, cx));
 
         let is_editing_title = self.title_edit_overlay_tab_id.is_some();
-        let mut tab_bar =
-            TabBar::new("agent-tab-bar").track_scroll(self.tab_bar_scroll_handle.clone());
+        let mut tab_bar = TabBar::new("agent-tab-bar")
+            .track_scroll(self.tab_bar_scroll_handle.clone())
+            .end_child(end_slot);
         // .when(is_editing_title, |this| this.border_b_1());
-
-        if show_tab_bar_controls {
-            tab_bar = tab_bar.end_child(end_slot);
-        }
 
         if let Some(overlay_view) = &self.overlay_view {
             let TabLabelRender {
