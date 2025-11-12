@@ -31,13 +31,15 @@ jobs:
           cat << 'EOF' > $PWD/post_pr_comment
           #!/bin/bash
           printf '%s' "$1" > /tmp/comment.md
+          # Strip full path to make it relative to current working directory
+          diff_path=$(realpath --relative-to=. "$2")
           gh api --method POST \
             -H 'X-GitHub-Api-Version: 2022-11-28' \
             -H "Accept: application/vnd.github+json" \
             /repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
             --raw-field 'commit_id=${{ github.event.pull_request.head.sha }}' \
             --raw-field 'side=RIGHT' \
-            --field "body=@/tmp/comment.md" --raw-field "path=$2" --field "line=$3"
+            --field "body=@/tmp/comment.md" --raw-field "path=$diff_path" --field "line=$3"
           EOF
           chmod +x $PWD/post_pr_comment
 
@@ -66,6 +68,7 @@ jobs:
 
           - Use the 'post_pr_comment' command to create comments on the files for the violations.
           - Leave the comment on the exact line number.
+          - You can use inline code or code block where appropriate.
           - If you have a suggested fix, include it in a suggestion code block.
           - Only create comments for actual violations. If the code follows all guidelines, don't run any 'post_pr_comment'.
           - Command format MUST be like this:
