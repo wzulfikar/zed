@@ -17,8 +17,21 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Create post_pr_comment script
+      - name: Install opencode
+        run: curl -fsSL https://opencode.ai/install | bash
+
+      - name: Review PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          OPENCODE_MODEL: "zai-coding-plan/glm-4.6"
+          OPENCODE_PERMISSION: '{ "bash": { "post_pr_comment": "allow", "*": "deny" } }'
         run: |
+          # Configure OpenCode auth and model
+          mkdir -p $HOME/.local/share/opencode/
+          echo '{"zai-coding-plan": { "type": "api", "key": "'$ZAI_API_KEY'"}}' > $HOME/.local/share/opencode/auth.json
+
+          # Create post_pr_comment script in the same step where it's used
           cat << 'EOF' > $HOME/post_pr_comment
           #!/bin/bash
           gh api \
@@ -33,25 +46,7 @@ jobs:
           chmod +x $HOME/post_pr_comment
           echo "$HOME/post_pr_comment" >> $GITHUB_PATH
 
-      - name: Configure OpenCode auth and model
-        env:
-          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
-          OPENCODE_MODEL: "zai-coding-plan/glm-4.6"
-        run: |
-          mkdir -p $HOME/.config/opencode/
-          echo '{"model": "'$OPENCODE_MODEL'"}' > $HOME/.config/opencode/config.json
-          mkdir -p $HOME/.local/share/opencode/
-          echo '{"zai-coding-plan": { "type": "api", "key": "'$ZAI_API_KEY'"}}' > $HOME/.local/share/opencode/auth.json
-
-      - name: Install opencode
-        run: curl -fsSL https://opencode.ai/install | bash
-
-      - name: Review PR
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-          OPENCODE_PERMISSION: '{ "bash": { "post_pr_comment": "allow", "*": "deny" } }'
-        run: |
-          opencode run "A new pull request has been created: '${{ github.event.pull_request.title }}'
+          opencode run -m $OPENCODE_MODEL "A new pull request has been created: '${{ github.event.pull_request.title }}'
 
           <pr-description>
           ${{ github.event.pull_request.body }}
