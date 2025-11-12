@@ -37,7 +37,7 @@ jobs:
             /repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
             -f 'commit_id=${{ github.event.pull_request.head.sha }}' \
             -f 'side=RIGHT' \
-            -f "body@/tmp/comment.md" -f "path=$2" -F "line=$3"
+            --field "body=@/tmp/comment.md" --raw-field "path=$2" --field "line=$3"
           EOF
           chmod +x $PWD/post_pr_comment
 
