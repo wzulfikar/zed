@@ -4,8 +4,9 @@ use std::ops::Range;
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::Duration;
 
-use acp_thread::{AcpThread, AcpThreadEvent};
+use acp_thread::{AcpThread, AcpThreadEvent, ThreadStatus};
 use agent::{ContextServerRegistry, DbThreadMetadata, HistoryEntry, HistoryStore};
 use agent_client_protocol as acp;
 use db::kvp::{Dismissable, KEY_VALUE_STORE};
@@ -55,9 +56,9 @@ use extension::ExtensionEvents;
 use extension_host::ExtensionStore;
 use fs::Fs;
 use gpui::{
-    Action, AnyElement, App, AsyncWindowContext, Corner, DismissEvent, Entity, EventEmitter,
-    ExternalPaths, FocusHandle, Focusable, KeyContext, Pixels, ScrollHandle, SharedString,
-    Subscription, Task, UpdateGlobal, WeakEntity, prelude::*,
+    Action, Animation, AnimationExt, AnyElement, App, AsyncWindowContext, Corner, DismissEvent,
+    Entity, EventEmitter, ExternalPaths, FocusHandle, Focusable, KeyContext, Pixels, ScrollHandle,
+    SharedString, Subscription, Task, UpdateGlobal, WeakEntity, prelude::*, pulsating_between,
 };
 use language::LanguageRegistry;
 use language_model::{ConfigurationError, LanguageModelRegistry};
@@ -230,6 +231,7 @@ pub fn init(cx: &mut App) {
 }
 
 type TabId = usize;
+
 enum ActiveView {
     ExternalAgentThread {
         thread_view: Entity<AcpThreadView>,
@@ -1922,11 +1924,33 @@ impl AgentPanel {
 
                 let (label_text, tooltip) = Self::display_tab_label(text, is_active);
 
-                TabLabelRender {
-                    element: Label::new(label_text)
+                let is_generating = thread_view
+                    .read(cx)
+                    .thread()
+                    .map(|thread| thread.read(cx).status() == ThreadStatus::Generating)
+                    .unwrap_or(false);
+
+                let label = if is_generating {
+                    Label::new(label_text)
                         .color(Color::Muted)
                         .truncate()
-                        .into_any_element(),
+                        .with_animation(
+                            "pulsating-tab-label",
+                            Animation::new(Duration::from_secs(2))
+                                .repeat()
+                                .with_easing(pulsating_between(0.4, 0.8)),
+                            |label, delta| label.alpha(delta),
+                        )
+                        .into_any_element()
+                } else {
+                    Label::new(label_text)
+                        .color(Color::Muted)
+                        .truncate()
+                        .into_any_element()
+                };
+
+                TabLabelRender {
+                    element: label,
                     tooltip,
                 }
             }
@@ -1937,14 +1961,39 @@ impl AgentPanel {
             } => {
                 let summary = text_thread_editor.read(cx).text_thread().read(cx).summary();
 
+                let is_generating = text_thread_editor
+                    .read(cx)
+                    .text_thread()
+                    .read(cx)
+                    .messages(cx)
+                    .any(|message| message.status == assistant_text_thread::MessageStatus::Pending);
+
                 match summary {
-                    TextThreadSummary::Pending => TabLabelRender {
-                        element: Label::new(TextThreadSummary::DEFAULT)
-                            .color(Color::Muted)
-                            .truncate()
-                            .into_any_element(),
-                        tooltip: None,
-                    },
+                    TextThreadSummary::Pending => {
+                        let label = if is_generating {
+                            Label::new(TextThreadSummary::DEFAULT)
+                                .color(Color::Muted)
+                                .truncate()
+                                .with_animation(
+                                    "pulsating-tab-label",
+                                    Animation::new(Duration::from_secs(2))
+                                        .repeat()
+                                        .with_easing(pulsating_between(0.4, 0.8)),
+                                    |label, delta| label.alpha(delta),
+                                )
+                                .into_any_element()
+                        } else {
+                            Label::new(TextThreadSummary::DEFAULT)
+                                .color(Color::Muted)
+                                .truncate()
+                                .into_any_element()
+                        };
+
+                        TabLabelRender {
+                            element: label,
+                            tooltip: None,
+                        }
+                    }
                     TextThreadSummary::Content(summary) => {
                         if summary.done {
                             let mut text = title_editor.read(cx).text(cx);
@@ -1953,8 +2002,23 @@ impl AgentPanel {
                             }
                             let (label_text, tooltip) = Self::display_tab_label(text, is_active);
 
+                            let label = if is_generating {
+                                Label::new(label_text)
+                                    .truncate()
+                                    .with_animation(
+                                        "pulsating-tab-label",
+                                        Animation::new(Duration::from_secs(2))
+                                            .repeat()
+                                            .with_easing(pulsating_between(0.4, 0.8)),
+                                        |label, delta| label.alpha(delta),
+                                    )
+                                    .into_any_element()
+                            } else {
+                                Label::new(label_text).truncate().into_any_element()
+                            };
+
                             TabLabelRender {
-                                element: Label::new(label_text).truncate().into_any_element(),
+                                element: label,
                                 tooltip,
                             }
                         } else {
@@ -1971,11 +2035,27 @@ impl AgentPanel {
                         let text = title_editor.read(cx).text(cx);
                         let (label_text, tooltip) = Self::display_tab_label(text, is_active);
 
-                        TabLabelRender {
-                            element: Label::new(label_text)
+                        let label = if is_generating {
+                            Label::new(label_text)
                                 .color(Color::Muted)
                                 .truncate()
-                                .into_any_element(),
+                                .with_animation(
+                                    "pulsating-tab-label",
+                                    Animation::new(Duration::from_secs(2))
+                                        .repeat()
+                                        .with_easing(pulsating_between(0.4, 0.8)),
+                                    |label, delta| label.alpha(delta),
+                                )
+                                .into_any_element()
+                        } else {
+                            Label::new(label_text)
+                                .color(Color::Muted)
+                                .truncate()
+                                .into_any_element()
+                        };
+
+                        TabLabelRender {
+                            element: label,
                             tooltip,
                         }
                     }
@@ -2088,7 +2168,8 @@ impl AgentPanel {
                 .h(Tab::content_height(cx))
                 .px(DynamicSpacing::Base04.px(cx))
                 .gap(DynamicSpacing::Base04.rems(cx))
-                .child(self.render_toolbar_back_button(cx).into_any_element())
+                .bg(cx.theme().colors().panel_background)
+                .border_0()
                 .child(h_flex().flex_grow().items_center().child(content))
                 .on_action(cx.listener(|this, _: &Confirm, window, cx| {
                     if this.title_edit_overlay_tab_id.take().is_some() {
@@ -2613,8 +2694,10 @@ impl AgentPanel {
             .child(self.render_recent_entries_menu(IconName::MenuAltTemp, Corner::TopRight, cx))
             .child(self.render_panel_options_menu(window, cx));
 
+        let is_editing_title = self.title_edit_overlay_tab_id.is_some();
         let mut tab_bar =
             TabBar::new("agent-tab-bar").track_scroll(self.tab_bar_scroll_handle.clone());
+        // .when(is_editing_title, |this| this.border_b_1());
 
         if show_tab_bar_controls {
             tab_bar = tab_bar.end_child(end_slot);

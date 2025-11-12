@@ -78,6 +78,8 @@ actions!(
         AddContextServer,
         /// Removes the currently selected thread.
         RemoveSelectedThread,
+        /// Closes the currently active thread tab.
+        CloseActiveThreadTab,
         /// Starts a chat conversation with follow-up enabled.
         ChatWithFollow,
         /// Cycles to the next inline assist suggestion.
@@ -100,8 +102,6 @@ actions!(
         OpenActiveThreadAsMarkdown,
         /// Opens the agent diff view to review changes.
         OpenAgentDiff,
-        /// Closes the currently active thread tab.
-        CloseActiveThreadTab,
         /// Keeps the current suggestion or change.
         Keep,
         /// Rejects the current suggestion or change.
