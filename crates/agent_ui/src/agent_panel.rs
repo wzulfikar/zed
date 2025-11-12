@@ -2670,7 +2670,11 @@ impl AgentPanel {
                 .close_side(TabCloseSide::End)
                 .toggle_state(is_active)
                 .on_click(cx.listener(move |this: &mut Self, _, window, cx| {
-                    this.set_active_tab_by_id(index, window, cx);
+                    if is_active {
+                        this.focus_title_editor(window, cx);
+                    } else {
+                        this.set_active_tab_by_id(index, window, cx);
+                    }
                 }))
                 .child(tab_label)
                 .start_slot(self.render_tab_agent_icon(index, tab.agent(), &agent_server_store, cx))
