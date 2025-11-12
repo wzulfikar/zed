@@ -23,7 +23,7 @@ jobs:
       - name: Review PR
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           OPENCODE_PERMISSION: '{ "bash": { "gh*": "allow", "gh pr review*": "deny", "*": "deny" } }'
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
         run: |
@@ -51,7 +51,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             /repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
-            -f 'body=[summary of issue]' -f 'commit_id=${{ github.event.pull_request.head.sha }}' -f 'path=[path-to-file]' -F "line=[line]" -f 'side=RIGHT'
+            -f 'body=[summary of issue]' -f 'commit_id=${{ github.event.pull_request.head.sha }}' -f 'path=[path-to-file]' -F 'line=[line]' -f 'side=RIGHT'
           ```
 
           Only create comments for actual violations. If the code follows all guidelines, don't run any gh commands."
