@@ -58,7 +58,8 @@ use fs::Fs;
 use gpui::{
     Action, Animation, AnimationExt, AnyElement, App, AsyncWindowContext, Corner, DismissEvent,
     Entity, EventEmitter, ExternalPaths, FocusHandle, Focusable, KeyContext, Pixels, ScrollHandle,
-    SharedString, Subscription, Task, UpdateGlobal, WeakEntity, prelude::*, pulsating_between,
+    SharedString, Subscription, Task, UpdateGlobal, WeakEntity, bounce, ease_in_out, prelude::*,
+    pulsating_between,
 };
 use language::LanguageRegistry;
 use language_model::{ConfigurationError, LanguageModelRegistry};
@@ -1938,15 +1939,12 @@ impl AgentPanel {
                             "pulsating-tab-label",
                             Animation::new(Duration::from_secs(2))
                                 .repeat()
-                                .with_easing(pulsating_between(0.4, 0.8)),
+                                .with_easing(bounce(ease_in_out)),
                             |label, delta| label.alpha(delta),
                         )
                         .into_any_element()
                 } else {
-                    Label::new(label_text)
-                        .color(Color::Muted)
-                        .truncate()
-                        .into_any_element()
+                    Label::new(label_text).truncate().into_any_element()
                 };
 
                 TabLabelRender {
@@ -1978,13 +1976,12 @@ impl AgentPanel {
                                     "pulsating-tab-label",
                                     Animation::new(Duration::from_secs(2))
                                         .repeat()
-                                        .with_easing(pulsating_between(0.4, 0.8)),
+                                        .with_easing(bounce(ease_in_out)),
                                     |label, delta| label.alpha(delta),
                                 )
                                 .into_any_element()
                         } else {
                             Label::new(TextThreadSummary::DEFAULT)
-                                .color(Color::Muted)
                                 .truncate()
                                 .into_any_element()
                         };
@@ -2009,7 +2006,7 @@ impl AgentPanel {
                                         "pulsating-tab-label",
                                         Animation::new(Duration::from_secs(2))
                                             .repeat()
-                                            .with_easing(pulsating_between(0.4, 0.8)),
+                                            .with_easing(bounce(ease_in_out)),
                                         |label, delta| label.alpha(delta),
                                     )
                                     .into_any_element()
@@ -2043,15 +2040,12 @@ impl AgentPanel {
                                     "pulsating-tab-label",
                                     Animation::new(Duration::from_secs(2))
                                         .repeat()
-                                        .with_easing(pulsating_between(0.4, 0.8)),
+                                        .with_easing(bounce(ease_in_out)),
                                     |label, delta| label.alpha(delta),
                                 )
                                 .into_any_element()
                         } else {
-                            Label::new(label_text)
-                                .color(Color::Muted)
-                                .truncate()
-                                .into_any_element()
+                            Label::new(label_text).truncate().into_any_element()
                         };
 
                         TabLabelRender {
