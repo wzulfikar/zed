@@ -54,7 +54,6 @@ pub async fn run_evaluate(
 
             let tasks = zetas.into_iter().enumerate().map(|(repetition_ix, zeta)| {
                 let repetition_ix = (args.repetitions > 1).then(|| repetition_ix as u16);
-
                 let example = example.clone();
                 let project = project.clone();
 
@@ -85,7 +84,7 @@ pub async fn run_evaluate(
     {
         write_aggregated_scores(&mut output_file, &all_results).log_err();
     };
-    print_run_data_dir(args.repetitions == 1);
+    print_run_data_dir(args.repetitions == 1, std::io::stdout().is_terminal());
 }
 
 fn write_aggregated_scores(
@@ -104,8 +103,7 @@ fn write_aggregated_scores(
                 }
 
                 failed_count += 1;
-                let err = err
-                    .to_string()
+                let err = format!("{err:?}")
                     .replace("<edits", "```xml\n<edits")
                     .replace("</edits>", "</edits>\n```");
                 writeln!(
@@ -174,6 +172,7 @@ pub async fn run_evaluate_one(
             &predict_result,
             &evaluation_result,
             &mut std::io::stdout(),
+            std::io::stdout().is_terminal(),
         )?;
     }
 
@@ -185,6 +184,7 @@ pub async fn run_evaluate_one(
             &predict_result,
             &evaluation_result,
             &mut results_file,
+            false,
         )
         .log_err();
     }
@@ -197,18 +197,27 @@ fn write_eval_result(
     predictions: &PredictionDetails,
     evaluation_result: &EvaluationResult,
     out: &mut impl Write,
+    use_color: bool,
 ) -> Result<()> {
     writeln!(
         out,
         "## Expected edit prediction:\n\n```diff\n{}\n```\n",
-        compare_diffs(&example.example.expected_patch, &predictions.diff)
+        compare_diffs(
+            &example.example.expected_patch,
+            &predictions.diff,
+            use_color
+        )
     )?;
     writeln!(
         out,
         "## Actual edit prediction:\n\n```diff\n{}\n```\n",
-        compare_diffs(&predictions.diff, &example.example.expected_patch)
+        compare_diffs(
+            &predictions.diff,
+            &example.example.expected_patch,
+            use_color
+        )
     )?;
-    writeln!(out, "{}", evaluation_result)?;
+    writeln!(out, "{:#}", evaluation_result)?;
 
     anyhow::Ok(())
 }
@@ -304,6 +313,16 @@ False Negatives : {}",
 
 impl std::fmt::Display for EvaluationResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if f.alternate() {
+            self.fmt_table(f)
+        } else {
+            self.fmt_markdown(f)
+        }
+    }
+}
+
+impl EvaluationResult {
+    fn fmt_markdown(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             r#"
@@ -315,6 +334,38 @@ impl std::fmt::Display for EvaluationResult {
 "#,
             self.context.to_markdown(),
             self.edit_prediction.to_markdown()
+        )
+    }
+
+    fn fmt_table(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "### Scores\n")?;
+        writeln!(
+            f,
+            "                   TP     FP     FN     Precision   Recall     F1"
+        )?;
+        writeln!(
+            f,
+            "──────────────────────────────────────────────────────────────────"
+        )?;
+        writeln!(
+            f,
+            "Context Retrieval  {:<6} {:<6} {:<6} {:>10.2} {:>7.2} {:>7.2}",
+            self.context.true_positives,
+            self.context.false_positives,
+            self.context.false_negatives,
+            self.context.precision() * 100.0,
+            self.context.recall() * 100.0,
+            self.context.f1_score() * 100.0
+        )?;
+        writeln!(
+            f,
+            "Edit Prediction    {:<6} {:<6} {:<6} {:>10.2} {:>7.2} {:>7.2}",
+            self.edit_prediction.true_positives,
+            self.edit_prediction.false_positives,
+            self.edit_prediction.false_negatives,
+            self.edit_prediction.precision() * 100.0,
+            self.edit_prediction.recall() * 100.0,
+            self.edit_prediction.f1_score() * 100.0
         )
     }
 }
@@ -393,8 +444,7 @@ pub fn evaluate(example: &Example, preds: &PredictionDetails) -> EvaluationResul
 /// Return annotated `patch_a` so that:
 /// Additions and deletions that are not present in `patch_b` will be highlighted in red.
 /// Additions and deletions that are present in `patch_b` will be highlighted in green.
-pub fn compare_diffs(patch_a: &str, patch_b: &str) -> String {
-    let use_color = std::io::stdout().is_terminal();
+pub fn compare_diffs(patch_a: &str, patch_b: &str, use_color: bool) -> String {
     let green = if use_color { "\x1b[32m✓ " } else { "" };
     let red = if use_color { "\x1b[31m✗ " } else { "" };
     let neutral = if use_color { "  " } else { "" };
