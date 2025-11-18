@@ -1690,6 +1690,103 @@ impl Panel for AgentPanel {
 }
 
 impl AgentPanel {
+    // Note: not used in Zed fork because we're using agent tabs
+    fn render_title_view(&self, _window: &mut Window, cx: &Context<Self>) -> AnyElement {
+        let content = match &self.active_view() {
+            ActiveView::ExternalAgentThread { thread_view } => {
+                if let Some(title_editor) = thread_view.read(cx).title_editor() {
+                    div()
+                        .w_full()
+                        .on_action({
+                            let thread_view = thread_view.downgrade();
+                            move |_: &menu::Confirm, window, cx| {
+                                if let Some(thread_view) = thread_view.upgrade() {
+                                    thread_view.focus_handle(cx).focus(window);
+                                }
+                            }
+                        })
+                        .on_action({
+                            let thread_view = thread_view.downgrade();
+                            move |_: &editor::actions::Cancel, window, cx| {
+                                if let Some(thread_view) = thread_view.upgrade() {
+                                    thread_view.focus_handle(cx).focus(window);
+                                }
+                            }
+                        })
+                        .child(title_editor)
+                        .into_any_element()
+                } else {
+                    Label::new(thread_view.read(cx).title(cx))
+                        .color(Color::Muted)
+                        .truncate()
+                        .into_any_element()
+                }
+            }
+            ActiveView::TextThread {
+                title_editor,
+                text_thread_editor,
+                ..
+            } => {
+                let summary = text_thread_editor.read(cx).text_thread().read(cx).summary();
+
+                match summary {
+                    TextThreadSummary::Pending => Label::new(TextThreadSummary::DEFAULT)
+                        .color(Color::Muted)
+                        .truncate()
+                        .into_any_element(),
+                    TextThreadSummary::Content(summary) => {
+                        if summary.done {
+                            div()
+                                .w_full()
+                                .child(title_editor.clone())
+                                .into_any_element()
+                        } else {
+                            Label::new(LOADING_SUMMARY_PLACEHOLDER)
+                                .truncate()
+                                .color(Color::Muted)
+                                .into_any_element()
+                        }
+                    }
+                    TextThreadSummary::Error => h_flex()
+                        .w_full()
+                        .child(title_editor.clone())
+                        .child(
+                            IconButton::new("retry-summary-generation", IconName::RotateCcw)
+                                .icon_size(IconSize::Small)
+                                .on_click({
+                                    let text_thread_editor = text_thread_editor.clone();
+                                    move |_, _window, cx| {
+                                        text_thread_editor.update(cx, |text_thread_editor, cx| {
+                                            text_thread_editor.regenerate_summary(cx);
+                                        });
+                                    }
+                                })
+                                .tooltip(move |_window, cx| {
+                                    cx.new(|_| {
+                                        Tooltip::new("Failed to generate title")
+                                            .meta("Click to try again")
+                                    })
+                                    .into()
+                                }),
+                        )
+                        .into_any_element(),
+                }
+            }
+            ActiveView::History => Label::new("History").truncate().into_any_element(),
+            ActiveView::Configuration => Label::new("Settings").truncate().into_any_element(),
+        };
+
+        h_flex()
+            .key_context("TitleEditor")
+            .id("TitleEditor")
+            .flex_grow()
+            .w_full()
+            .max_w_full()
+            .overflow_x_scroll()
+            .child(content)
+            .into_any()
+    }
+
     fn render_overlay_title_editor(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let tab_id = self.title_edit_overlay_tab_id?;
         let tab = self.tabs.get(tab_id)?;
@@ -2716,6 +2813,7 @@ impl AgentPanel {
             .into_any_element()
     }
 
+    // Note: not used in Zed fork because we're using agent tabs
     fn render_toolbar(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let agent_server_store = self.project.read(cx).agent_server_store().clone();
         let focus_handle = self.focus_handle(cx);
@@ -2730,7 +2828,7 @@ impl AgentPanel {
                 None
             };
 
-        let active_thread = match &self.active_view {
+        let active_thread = match &self.active_view() {
             ActiveView::ExternalAgentThread { thread_view } => {
                 thread_view.read(cx).as_native_thread(cx)
             }
@@ -3084,7 +3182,7 @@ impl AgentPanel {
                     .size_full()
                     .gap(DynamicSpacing::Base04.rems(cx))
                     .pl(DynamicSpacing::Base04.rems(cx))
-                    .child(match &self.active_view {
+                    .child(match &self.active_view() {
                         ActiveView::History | ActiveView::Configuration => {
                             self.render_toolbar_back_button(cx).into_any_element()
                         }
