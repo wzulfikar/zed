@@ -19,6 +19,7 @@ use project::{
 use serde::{Deserialize, Serialize};
 use settings::{
     DefaultAgentView as DefaultView, LanguageModelProviderSetting, LanguageModelSelection,
+    SettingsStore,
 };
 
 use zed_actions::agent::{OpenClaudeCodeOnboardingModal, ReauthenticateAgent};
@@ -3406,11 +3407,6 @@ impl AgentPanel {
 
                                     let mut entry = ContextMenuEntry::new(agent_name.clone());
 
-                                    let Some(settings) = custom_settings.get(&agent_name.0) else {
-                                        continue;
-                                    };
-                                    let command = settings.command.clone();
-
                                     if let Some(icon_path) = icon_path {
                                         entry = entry.custom_icon_svg(icon_path);
                                     } else {
@@ -3420,7 +3416,6 @@ impl AgentPanel {
                                         .when(
                                             is_agent_selected(AgentType::Custom {
                                                 name: agent_name.0.clone(),
-                                                command,
                                             }),
                                             |this| {
                                                 this.action(Box::new(NewExternalAgentThread { agent: None }))
@@ -3438,19 +3433,15 @@ impl AgentPanel {
                                                         if let Some(panel) =
                                                             workspace.panel::<AgentPanel>(cx)
                                                         {
-                                                            if let Some(settings) = custom_settings.get(&agent_name.0) {
-                                                                let command = settings.command.clone();
-                                                                panel.update(cx, |panel, cx| {
-                                                                    panel.new_agent_thread(
-                                                                        AgentType::Custom {
-                                                                            name: agent_name.clone().into(),
-                                                                            command,
-                                                                        },
-                                                                        window,
-                                                                        cx,
-                                                                    );
-                                                                });
-                                                            }
+                                                            panel.update(cx, |panel, cx| {
+                                                                panel.new_agent_thread(
+                                                                    AgentType::Custom {
+                                                                        name: agent_name.clone().into(),
+                                                                    },
+                                                                    window,
+                                                                    cx,
+                                                                );
+                                                            });
                                                         }
                                                     });
                                                 }
