@@ -19,10 +19,12 @@ use project::{
 use serde::{Deserialize, Serialize};
 use settings::{
     DefaultAgentView as DefaultView, LanguageModelProviderSetting, LanguageModelSelection,
+    SettingsStore,
 };
 
 use zed_actions::agent::{OpenClaudeCodeOnboardingModal, ReauthenticateAgent};
 
+use crate::ManageProfiles;
 use crate::agent_panel_tab::{AgentPanelTab, AgentPanelTabIdentity, TabId, TabLabelRender};
 use crate::ui::{AcpOnboardingModal, ClaudeCodeOnboardingModal};
 use crate::{
@@ -41,7 +43,6 @@ use crate::{
     acp::{AcpThreadHistory, ThreadHistoryEvent},
 };
 use crate::{ExternalAgent, NewExternalAgentThread, NewNativeAgentThreadFromSummary};
-use crate::{ManageProfiles, context_store::ContextStore};
 use agent_settings::AgentSettings;
 use ai_onboarding::AgentPanelOnboarding;
 use anyhow::{Result, anyhow};
@@ -446,7 +447,6 @@ pub struct AgentPanel {
     text_thread_store: Entity<assistant_text_thread::TextThreadStore>,
     prompt_store: Option<Entity<PromptStore>>,
     context_server_registry: Entity<ContextServerRegistry>,
-    inline_assist_context_store: Entity<ContextStore>,
     configuration: Option<Entity<AgentConfiguration>>,
     configuration_subscription: Option<Subscription>,
     overlay_view: Option<ActiveView>,
@@ -563,7 +563,6 @@ impl AgentPanel {
         let client = workspace.client().clone();
         let workspace = workspace.weak_handle();
 
-        let inline_assist_context_store = cx.new(|_cx| ContextStore::new(project.downgrade()));
         let context_server_registry =
             cx.new(|cx| ContextServerRegistry::new(project.read(cx).context_server_store(), cx));
 
@@ -716,7 +715,6 @@ impl AgentPanel {
             configuration: None,
             configuration_subscription: None,
             context_server_registry,
-            inline_assist_context_store,
             overlay_previous_tab_id: None,
             new_thread_menu_handle: PopoverMenuHandle::default(),
             agent_panel_menu_handle: PopoverMenuHandle::default(),
@@ -762,10 +760,6 @@ impl AgentPanel {
 
     pub(crate) fn prompt_store(&self) -> &Option<Entity<PromptStore>> {
         &self.prompt_store
-    }
-
-    pub(crate) fn inline_assist_context_store(&self) -> &Entity<ContextStore> {
-        &self.inline_assist_context_store
     }
 
     pub(crate) fn thread_store(&self) -> &Entity<HistoryStore> {
@@ -3413,11 +3407,6 @@ impl AgentPanel {
 
                                     let mut entry = ContextMenuEntry::new(agent_name.clone());
 
-                                    let command = custom_settings
-                                        .get(&agent_name.0)
-                                        .map(|settings| settings.command.clone())
-                                        .unwrap_or(placeholder_command());
-
                                     if let Some(icon_path) = icon_path {
                                         entry = entry.custom_icon_svg(icon_path);
                                     } else {
@@ -3427,7 +3416,6 @@ impl AgentPanel {
                                         .when(
                                             is_agent_selected(AgentType::Custom {
                                                 name: agent_name.0.clone(),
-                                                command: command.clone(),
                                             }),
                                             |this| {
                                                 this.action(Box::new(NewExternalAgentThread { agent: None }))
@@ -3448,20 +3436,7 @@ impl AgentPanel {
                                                             panel.update(cx, |panel, cx| {
                                                                 panel.new_agent_thread(
                                                                     AgentType::Custom {
-                                                                        name: agent_name
-                                                                            .clone()
-                                                                            .into(),
-                                                                        command: custom_settings
-                                                                            .get(&agent_name.0)
-                                                                            .map(|settings| {
-                                                                                settings
-                                                                                    .command
-                                                                                    .clone()
-                                                                            })
-                                                                            .unwrap_or(
-                                                                                placeholder_command(
-                                                                                ),
-                                                                            ),
+                                                                        name: agent_name.clone().into(),
                                                                     },
                                                                     window,
                                                                     cx,
@@ -3705,23 +3680,19 @@ impl rules_library::InlineAssistDelegate for PromptLibraryInlineAssist {
         cx: &mut Context<RulesLibrary>,
     ) {
         InlineAssistant::update_global(cx, |assistant, cx| {
-            let Some(project) = self
-                .workspace
-                .upgrade()
-                .map(|workspace| workspace.read(cx).project().downgrade())
-            else {
+            let Some(workspace) = self.workspace.upgrade() else {
                 return;
             };
-            let prompt_store = None;
-            let thread_store = None;
-            let context_store = cx.new(|_| ContextStore::new(project.clone()));
+            let Some(panel) = workspace.read(cx).panel::<AgentPanel>(cx) else {
+                return;
+            };
+            let project = workspace.read(cx).project().downgrade();
             assistant.assist(
                 prompt_editor,
                 self.workspace.clone(),
-                context_store,
                 project,
-                prompt_store,
-                thread_store,
+                panel.read(cx).thread_store().clone(),
+                None,
                 initial_prompt,
                 window,
                 cx,
