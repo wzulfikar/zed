@@ -1225,7 +1225,7 @@ fn insert_message_creases(
             )
         })
         .collect::<Vec<_>>();
-    editor.insert_creases(creases.clone(), cx);
+    let ids = editor.insert_creases(creases.clone(), cx);
     editor.fold_creases(creases, false, window, cx);
     ids
 }
