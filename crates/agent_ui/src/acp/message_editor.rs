@@ -165,8 +165,8 @@ impl MessageEditor {
         let mut has_hint = false;
         let mut subscriptions = Vec::new();
 
-        subscriptions.push(cx.subscribe(&editor, {
-            move |this, editor, event, cx| {
+        subscriptions.push(cx.subscribe_in(&editor, window, {
+            move |this, editor, event, window, cx| {
                 if let EditorEvent::Edited { .. } = event
                     && !editor.read(cx).read_only(cx)
                 {

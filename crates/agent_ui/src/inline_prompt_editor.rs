@@ -1,5 +1,5 @@
 use agent::HistoryStore;
-use collections::VecDeque;
+use collections::{HashMap, VecDeque};
 use editor::actions::Paste;
 use editor::code_context_menus::CodeContextMenu;
 use editor::display_map::{CreaseId, EditorMargins};
@@ -1225,7 +1225,7 @@ fn insert_message_creases(
             )
         })
         .collect::<Vec<_>>();
-    editor.insert_creases(creases.clone(), cx);
+    let ids = editor.insert_creases(creases.clone(), cx);
     editor.fold_creases(creases, false, window, cx);
     ids
 }
