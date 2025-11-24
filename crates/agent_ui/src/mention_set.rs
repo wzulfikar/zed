@@ -6,14 +6,14 @@ use anyhow::{Context as _, Result, anyhow};
 use assistant_slash_commands::codeblock_fence_for_path;
 use collections::{HashMap, HashSet};
 use editor::{
-    Anchor, Editor, EditorEvent, EditorSnapshot, ExcerptId, FoldPlaceholder, ToOffset,
+    Anchor, Editor, EditorSnapshot, ExcerptId, FoldPlaceholder, ToOffset,
     display_map::{Crease, CreaseId, CreaseMetadata, FoldId},
     scroll::Autoscroll,
 };
 use futures::{AsyncReadExt as _, FutureExt as _, future::Shared};
 use gpui::{
     Animation, AnimationExt as _, AppContext, ClipboardEntry, Context, Empty, Entity, EntityId,
-    Image, ImageFormat, Img, SharedString, Subscription, Task, WeakEntity, pulsating_between,
+    Image, ImageFormat, Img, SharedString, Task, WeakEntity, pulsating_between,
 };
 use http_client::{AsyncBody, HttpClientWithUrl};
 use itertools::Either;
