@@ -1,12 +1,13 @@
 #!/bin/sh
 
-LATEST_RELEASE_VERSION=$(curl -s -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/zed-industries/zed/releases | jq -r '.[0].name')
+LATEST_RELEASE_VERSION=$(gh api -H "Accept: application/vnd.github.v3+json" /repos/zed-industries/zed/releases | jq -r '.[0].name')
 
 LAST_VERSION_FROM_FILE=$(tail -1 .zd-upstream-version)
 
 if [ "$LATEST_RELEASE_VERSION" != "$LAST_VERSION_FROM_FILE" ]; then
-    echo $LATEST_RELEASE_VERSION >>.zd-upstream-version
-    echo "Latest release version: $LATEST_RELEASE_VERSION"
+    echo "$LATEST_RELEASE_VERSION $(date +%Y-%m-%d)" >>.zd-upstream-version
+    echo "Found new release since last check:"
+    echo "$LAST_VERSION_FROM_FILE → $LATEST_RELEASE_VERSION"
 else
     echo "No new release available."
     echo "Latest version is still $LAST_VERSION_FROM_FILE"
