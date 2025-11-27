@@ -12,14 +12,11 @@ use agent_client_protocol as acp;
 use db::kvp::{Dismissable, KEY_VALUE_STORE};
 use project::{
     ExternalAgentServerName,
-    agent_server_store::{
-        AgentServerStore, AllAgentServersSettings, CLAUDE_CODE_NAME, CODEX_NAME, GEMINI_NAME,
-    },
+    agent_server_store::{AgentServerStore, CLAUDE_CODE_NAME, CODEX_NAME, GEMINI_NAME},
 };
 use serde::{Deserialize, Serialize};
 use settings::{
     DefaultAgentView as DefaultView, LanguageModelProviderSetting, LanguageModelSelection,
-    SettingsStore,
 };
 
 use zed_actions::agent::{OpenClaudeCodeOnboardingModal, ReauthenticateAgent};
@@ -28,10 +25,9 @@ use crate::ManageProfiles;
 use crate::agent_panel_tab::{AgentPanelTab, AgentPanelTabIdentity, TabId, TabLabelRender};
 use crate::ui::{AcpOnboardingModal, ClaudeCodeOnboardingModal};
 use crate::{
-    AddContextServer, AgentDiffPane, CloseActiveThreadTab, DeleteRecentlyOpenThread, Follow,
-    InlineAssistant, NewTextThread, NewThread, OpenActiveThreadAsMarkdown, OpenAgentDiff,
-    OpenHistory, ResetTrialEndUpsell, ResetTrialUpsell, ToggleNavigationMenu, ToggleNewThreadMenu,
-    ToggleOptionsMenu,
+    AddContextServer, AgentDiffPane, CloseActiveThreadTab, Follow, InlineAssistant, NewTextThread,
+    NewThread, OpenActiveThreadAsMarkdown, OpenAgentDiff, OpenHistory, ResetTrialEndUpsell,
+    ResetTrialUpsell, ToggleNavigationMenu, ToggleNewThreadMenu, ToggleOptionsMenu,
     acp::AcpThreadView,
     agent_configuration::{AgentConfiguration, AssistantConfigurationEvent},
     slash_command::SlashCommandCompletionProvider,
@@ -1685,7 +1681,7 @@ impl Panel for AgentPanel {
 }
 
 impl AgentPanel {
-    // Note: not used in Zed fork because we're using agent tabs
+    // NOTE: not used in Zed fork because we're using agent tabs
     fn render_title_view(&self, _window: &mut Window, cx: &Context<Self>) -> AnyElement {
         let content = match &self.active_view() {
             ActiveView::ExternalAgentThread { thread_view } => {
@@ -2808,7 +2804,7 @@ impl AgentPanel {
             .into_any_element()
     }
 
-    // Note: not used in Zed fork because we're using agent tabs
+    // NOTE: not used in Zed fork because we're using agent tabs
     fn render_toolbar(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let agent_server_store = self.project.read(cx).agent_server_store().clone();
         let focus_handle = self.focus_handle(cx);
@@ -3401,12 +3397,6 @@ impl AgentPanel {
                                     .cloned()
                                     .collect::<Vec<_>>();
 
-                                let custom_settings = cx
-                                    .global::<SettingsStore>()
-                                    .get::<AllAgentServersSettings>(None)
-                                    .custom
-                                    .clone();
-
                                 for agent_name in agent_names {
                                     let icon_path = agent_server_store.agent_icon(&agent_name);
 
@@ -3431,7 +3421,6 @@ impl AgentPanel {
                                         .handler({
                                             let workspace = workspace.clone();
                                             let agent_name = agent_name.clone();
-                                            let custom_settings = custom_settings.clone();
                                             move |window, cx| {
                                                 if let Some(workspace) = workspace.upgrade() {
                                                     workspace.update(cx, |workspace, cx| {
@@ -3487,7 +3476,7 @@ impl AgentPanel {
             .child(self.render_panel_options_menu(window, cx));
 
         let mut tab_bar = TabBar::new("agent-tab-bar")
-            .track_scroll(self.tab_bar_scroll_handle.clone())
+            .track_scroll(&self.tab_bar_scroll_handle.clone())
             .end_child(end_slot);
 
         if let Some(overlay_view) = &self.overlay_view {
