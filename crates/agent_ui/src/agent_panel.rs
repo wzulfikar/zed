@@ -3401,12 +3401,6 @@ impl AgentPanel {
                                     .cloned()
                                     .collect::<Vec<_>>();
 
-                                let custom_settings = cx
-                                    .global::<SettingsStore>()
-                                    .get::<AllAgentServersSettings>(None)
-                                    .custom
-                                    .clone();
-
                                 for agent_name in agent_names {
                                     let icon_path = agent_server_store.agent_icon(&agent_name);
 
@@ -3431,7 +3425,6 @@ impl AgentPanel {
                                         .handler({
                                             let workspace = workspace.clone();
                                             let agent_name = agent_name.clone();
-                                            let custom_settings = custom_settings.clone();
                                             move |window, cx| {
                                                 if let Some(workspace) = workspace.upgrade() {
                                                     workspace.update(cx, |workspace, cx| {
@@ -3487,7 +3480,7 @@ impl AgentPanel {
             .child(self.render_panel_options_menu(window, cx));
 
         let mut tab_bar = TabBar::new("agent-tab-bar")
-            .track_scroll(self.tab_bar_scroll_handle.clone())
+            .track_scroll(&self.tab_bar_scroll_handle.clone())
             .end_child(end_slot);
 
         if let Some(overlay_view) = &self.overlay_view {

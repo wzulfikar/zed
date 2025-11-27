@@ -4600,20 +4600,15 @@ impl AcpThreadView {
 
     fn render_thread_timer(&self, _cx: &mut Context<Self>) -> impl IntoElement {
         let elapsed_time = if let Some(final_elapsed) = &self.generation_final_elapsed {
-            Some(self.format_elapsed_time(*final_elapsed))
+            self.format_elapsed_time(*final_elapsed)
         } else if let Some(started_at) = &self.generation_started_at {
-            Some(self.format_elapsed_time(started_at.elapsed()))
+            self.format_elapsed_time(started_at.elapsed())
         } else {
-            None
+            "".to_string()
         };
-
-        if elapsed_time.is_some() {
-            Label::new(elapsed_time.unwrap_or_default())
-                .size(LabelSize::Small)
-                .color(Color::Muted)
-        } else {
-            Label::new("")
-        }
+        Label::new(elapsed_time)
+            .size(LabelSize::Small)
+            .color(Color::Muted)
     }
 
     fn render_add_context_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
