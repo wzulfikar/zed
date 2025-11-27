@@ -653,6 +653,7 @@ impl AcpThreadView {
                             mode_selector,
                             _subscriptions: subscriptions,
                         };
+                        this.message_editor.focus_handle(cx).focus(window);
 
                         this.profile_selector = this.as_native_thread(cx).map(|thread| {
                             cx.new(|cx| {
@@ -1282,28 +1283,6 @@ impl AcpThreadView {
         };
 
         cx.spawn_in(window, async move |this, cx| {
-            // Check if there are any edits from prompts before the one being regenerated.
-            //
-            // If there are, we keep/accept them since we're not regenerating the prompt that created them.
-            //
-            // If editing the prompt that generated the edits, they are auto-rejected
-            // through the `rewind` function in the `acp_thread`.
-            let has_earlier_edits = thread.read_with(cx, |thread, _| {
-                thread
-                    .entries()
-                    .iter()
-                    .take(entry_ix)
-                    .any(|entry| entry.diffs().next().is_some())
-            })?;
-
-            if has_earlier_edits {
-                thread.update(cx, |thread, cx| {
-                    thread.action_log().update(cx, |action_log, cx| {
-                        action_log.keep_all_edits(None, cx);
-                    });
-                })?;
-            }
-
             thread
                 .update(cx, |thread, cx| thread.rewind(user_message_id, cx))?
                 .await?;
@@ -4000,7 +3979,7 @@ impl AcpThreadView {
                 let file = buffer.read(cx).file()?;
                 let path = file.path();
                 let path_style = file.path_style(cx);
-                let separator = file.path_style(cx).primary_separator();
+                let separator = file.path_style(cx).separator();
 
                 let file_path = path.parent().and_then(|parent| {
                     if parent.is_empty() {
@@ -4114,9 +4093,7 @@ impl AcpThreadView {
                                                 action_log
                                                     .reject_edits_in_ranges(
                                                         buffer.clone(),
-                                                        vec![Anchor::min_max_range_for_buffer(
-                                                            buffer.read(cx).remote_id(),
-                                                        )],
+                                                        vec![Anchor::MIN..Anchor::MAX],
                                                         Some(telemetry.clone()),
                                                         cx,
                                                     )
@@ -4137,9 +4114,7 @@ impl AcpThreadView {
                                             action_log.update(cx, |action_log, cx| {
                                                 action_log.keep_edits_in_range(
                                                     buffer.clone(),
-                                                    Anchor::min_max_range_for_buffer(
-                                                        buffer.read(cx).remote_id(),
-                                                    ),
+                                                    Anchor::MIN..Anchor::MAX,
                                                     Some(telemetry.clone()),
                                                     cx,
                                                 );
@@ -4758,8 +4733,11 @@ impl AcpThreadView {
                     let buffer = multibuffer.as_singleton();
                     if agent_location.buffer.upgrade() == buffer {
                         let excerpt_id = multibuffer.excerpt_ids().first().cloned();
-                        let anchor =
-                            editor::Anchor::in_buffer(excerpt_id.unwrap(), agent_location.position);
+                        let anchor = editor::Anchor::in_buffer(
+                            excerpt_id.unwrap(),
+                            buffer.unwrap().read(cx).remote_id(),
+                            agent_location.position,
+                        );
                         editor.change_selections(Default::default(), window, cx, |selections| {
                             selections.select_anchor_ranges([anchor..anchor]);
                         })
@@ -5939,7 +5917,7 @@ impl Render for AcpThreadView {
                             .flex_grow()
                             .into_any(),
                         )
-                        .vertical_scrollbar_for(&self.list_state, window, cx)
+                        .vertical_scrollbar_for(self.list_state.clone(), window, cx)
                         .into_any()
                     } else {
                         this.child(self.render_recent_history(cx)).into_any()
@@ -6151,7 +6129,7 @@ pub(crate) mod tests {
     use assistant_text_thread::TextThreadStore;
     use editor::MultiBufferOffset;
     use fs::FakeFs;
-    use gpui::{EventEmitter, TestAppContext, VisualTestContext};
+    use gpui::{EventEmitter, SemanticVersion, TestAppContext, VisualTestContext};
     use project::Project;
     use serde_json::json;
     use settings::SettingsStore;
@@ -6668,7 +6646,7 @@ pub(crate) mod tests {
             let settings_store = SettingsStore::test(cx);
             cx.set_global(settings_store);
             theme::init(theme::LoadThemes::JustBase, cx);
-            release_channel::init(semver::Version::new(0, 0, 0), cx);
+            release_channel::init(SemanticVersion::default(), cx);
             prompt_store::init(cx)
         });
     }

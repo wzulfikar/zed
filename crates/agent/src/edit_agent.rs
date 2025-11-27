@@ -172,14 +172,14 @@ impl EditAgent {
                 project.set_agent_location(
                     Some(AgentLocation {
                         buffer: buffer.downgrade(),
-                        position: language::Anchor::max_for_buffer(buffer.read(cx).remote_id()),
+                        position: language::Anchor::MAX,
                     }),
                     cx,
                 )
             });
             output_events_tx
                 .unbounded_send(EditAgentOutputEvent::Edited(
-                    Anchor::min_max_range_for_buffer(buffer.read(cx).remote_id()),
+                    language::Anchor::MIN..language::Anchor::MAX,
                 ))
                 .ok();
         })?;
@@ -187,7 +187,7 @@ impl EditAgent {
         while let Some(event) = parse_rx.next().await {
             match event? {
                 CreateFileParserEvent::NewTextChunk { chunk } => {
-                    let buffer_id = cx.update(|cx| {
+                    cx.update(|cx| {
                         buffer.update(cx, |buffer, cx| buffer.append(chunk, cx));
                         self.action_log
                             .update(cx, |log, cx| log.buffer_edited(buffer.clone(), cx));
@@ -195,18 +195,15 @@ impl EditAgent {
                             project.set_agent_location(
                                 Some(AgentLocation {
                                     buffer: buffer.downgrade(),
-                                    position: language::Anchor::max_for_buffer(
-                                        buffer.read(cx).remote_id(),
-                                    ),
+                                    position: language::Anchor::MAX,
                                 }),
                                 cx,
                             )
                         });
-                        buffer.read(cx).remote_id()
                     })?;
                     output_events_tx
                         .unbounded_send(EditAgentOutputEvent::Edited(
-                            Anchor::min_max_range_for_buffer(buffer_id),
+                            language::Anchor::MIN..language::Anchor::MAX,
                         ))
                         .ok();
                 }
@@ -706,7 +703,6 @@ impl EditAgent {
             role: Role::User,
             content: vec![MessageContent::Text(prompt)],
             cache: false,
-            reasoning_details: None,
         });
 
         // Include tools in the request so that we can take advantage of
@@ -1203,9 +1199,7 @@ mod tests {
             project.read_with(cx, |project, _| project.agent_location()),
             Some(AgentLocation {
                 buffer: buffer.downgrade(),
-                position: language::Anchor::max_for_buffer(
-                    cx.update(|cx| buffer.read(cx).remote_id())
-                ),
+                position: language::Anchor::MAX
             })
         );
 
@@ -1223,9 +1217,7 @@ mod tests {
             project.read_with(cx, |project, _| project.agent_location()),
             Some(AgentLocation {
                 buffer: buffer.downgrade(),
-                position: language::Anchor::max_for_buffer(
-                    cx.update(|cx| buffer.read(cx).remote_id())
-                ),
+                position: language::Anchor::MAX
             })
         );
 
@@ -1243,9 +1235,7 @@ mod tests {
             project.read_with(cx, |project, _| project.agent_location()),
             Some(AgentLocation {
                 buffer: buffer.downgrade(),
-                position: language::Anchor::max_for_buffer(
-                    cx.update(|cx| buffer.read(cx).remote_id())
-                ),
+                position: language::Anchor::MAX
             })
         );
 
@@ -1263,9 +1253,7 @@ mod tests {
             project.read_with(cx, |project, _| project.agent_location()),
             Some(AgentLocation {
                 buffer: buffer.downgrade(),
-                position: language::Anchor::max_for_buffer(
-                    cx.update(|cx| buffer.read(cx).remote_id())
-                ),
+                position: language::Anchor::MAX
             })
         );
 
@@ -1280,9 +1268,7 @@ mod tests {
             project.read_with(cx, |project, _| project.agent_location()),
             Some(AgentLocation {
                 buffer: buffer.downgrade(),
-                position: language::Anchor::max_for_buffer(
-                    cx.update(|cx| buffer.read(cx).remote_id())
-                ),
+                position: language::Anchor::MAX
             })
         );
     }

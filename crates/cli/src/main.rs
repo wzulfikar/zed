@@ -12,9 +12,7 @@ use clap::Parser;
 use cli::{CliRequest, CliResponse, IpcHandshake, ipc::IpcOneShotServer};
 use parking_lot::Mutex;
 use std::{
-    env,
-    ffi::OsStr,
-    fs, io,
+    env, fs, io,
     path::{Path, PathBuf},
     process::ExitStatus,
     sync::Arc,
@@ -302,6 +300,7 @@ mod tests {
 
 fn parse_path_in_wsl(source: &str, wsl: &str) -> Result<String> {
     let mut source = PathWithPosition::parse_str(source);
+    let mut command = util::command::new_std_command("wsl.exe");
 
     let (user, distro_name) = if let Some((user, distro)) = wsl.split_once('@') {
         if user.is_empty() {
@@ -312,34 +311,20 @@ fn parse_path_in_wsl(source: &str, wsl: &str) -> Result<String> {
         (None, wsl)
     };
 
-    let mut args = vec!["--distribution", distro_name];
     if let Some(user) = user {
-        args.push("--user");
-        args.push(user);
+        command.arg("--user").arg(user);
     }
 
-    let command = [
-        OsStr::new("realpath"),
-        OsStr::new("-s"),
-        source.path.as_ref(),
-    ];
-
-    let output = util::command::new_std_command("wsl.exe")
-        .args(&args)
+    let output = command
+        .arg("--distribution")
+        .arg(distro_name)
         .arg("--exec")
-        .args(&command)
+        .arg("realpath")
+        .arg("-s")
+        .arg(&source.path)
         .output()?;
-    let result = if output.status.success() {
-        String::from_utf8_lossy(&output.stdout).to_string()
-    } else {
-        let fallback = util::command::new_std_command("wsl.exe")
-            .args(&args)
-            .arg("--")
-            .args(&command)
-            .output()?;
-        String::from_utf8_lossy(&fallback.stdout).to_string()
-    };
 
+    let result = String::from_utf8_lossy(&output.stdout);
     source.path = Path::new(result.trim()).to_owned();
 
     Ok(source.to_string(|path| path.to_string_lossy().into_owned()))

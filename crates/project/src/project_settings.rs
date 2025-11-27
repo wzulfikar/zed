@@ -117,23 +117,13 @@ pub struct GlobalLspSettings {
 #[derive(Deserialize, Serialize, Clone, PartialEq, Eq, JsonSchema, Debug)]
 #[serde(tag = "source", rename_all = "snake_case")]
 pub enum ContextServerSettings {
-    Stdio {
+    Custom {
         /// Whether the context server is enabled.
         #[serde(default = "default_true")]
         enabled: bool,
 
         #[serde(flatten)]
         command: ContextServerCommand,
-    },
-    Http {
-        /// Whether the context server is enabled.
-        #[serde(default = "default_true")]
-        enabled: bool,
-        /// The URL of the remote context server.
-        url: String,
-        /// Optional authentication configuration for the remote server.
-        #[serde(skip_serializing_if = "HashMap::is_empty", default)]
-        headers: HashMap<String, String>,
     },
     Extension {
         /// Whether the context server is enabled.
@@ -145,13 +135,23 @@ pub enum ContextServerSettings {
         /// are supported.
         settings: serde_json::Value,
     },
+    Http {
+        /// Whether the context server is enabled.
+        #[serde(default = "default_true")]
+        enabled: bool,
+        /// The URL of the remote context server.
+        url: String,
+        /// Optional authentication configuration for the remote server.
+        #[serde(skip_serializing_if = "HashMap::is_empty", default)]
+        headers: HashMap<String, String>,
+    },
 }
 
 impl From<settings::ContextServerSettingsContent> for ContextServerSettings {
     fn from(value: settings::ContextServerSettingsContent) -> Self {
         match value {
-            settings::ContextServerSettingsContent::Stdio { enabled, command } => {
-                ContextServerSettings::Stdio { enabled, command }
+            settings::ContextServerSettingsContent::Custom { enabled, command } => {
+                ContextServerSettings::Custom { enabled, command }
             }
             settings::ContextServerSettingsContent::Extension { enabled, settings } => {
                 ContextServerSettings::Extension { enabled, settings }
@@ -171,8 +171,8 @@ impl From<settings::ContextServerSettingsContent> for ContextServerSettings {
 impl Into<settings::ContextServerSettingsContent> for ContextServerSettings {
     fn into(self) -> settings::ContextServerSettingsContent {
         match self {
-            ContextServerSettings::Stdio { enabled, command } => {
-                settings::ContextServerSettingsContent::Stdio { enabled, command }
+            ContextServerSettings::Custom { enabled, command } => {
+                settings::ContextServerSettingsContent::Custom { enabled, command }
             }
             ContextServerSettings::Extension { enabled, settings } => {
                 settings::ContextServerSettingsContent::Extension { enabled, settings }
@@ -200,17 +200,17 @@ impl ContextServerSettings {
 
     pub fn enabled(&self) -> bool {
         match self {
-            ContextServerSettings::Stdio { enabled, .. } => *enabled,
-            ContextServerSettings::Http { enabled, .. } => *enabled,
+            ContextServerSettings::Custom { enabled, .. } => *enabled,
             ContextServerSettings::Extension { enabled, .. } => *enabled,
+            ContextServerSettings::Http { enabled, .. } => *enabled,
         }
     }
 
     pub fn set_enabled(&mut self, enabled: bool) {
         match self {
-            ContextServerSettings::Stdio { enabled: e, .. } => *e = enabled,
-            ContextServerSettings::Http { enabled: e, .. } => *e = enabled,
+            ContextServerSettings::Custom { enabled: e, .. } => *e = enabled,
             ContextServerSettings::Extension { enabled: e, .. } => *e = enabled,
+            ContextServerSettings::Http { enabled: e, .. } => *e = enabled,
         }
     }
 }

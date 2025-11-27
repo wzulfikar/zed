@@ -991,8 +991,6 @@ fn python_env_kind_display(k: &PythonEnvironmentKind) -> &'static str {
         PythonEnvironmentKind::VirtualEnvWrapper => "virtualenvwrapper",
         PythonEnvironmentKind::WindowsStore => "global (Windows Store)",
         PythonEnvironmentKind::WindowsRegistry => "global (Windows Registry)",
-        PythonEnvironmentKind::Uv => "uv",
-        PythonEnvironmentKind::UvWorkspace => "uv (Workspace)",
     }
 }
 
@@ -1000,8 +998,6 @@ pub(crate) struct PythonToolchainProvider;
 
 static ENV_PRIORITY_LIST: &[PythonEnvironmentKind] = &[
     // Prioritize non-Conda environments.
-    PythonEnvironmentKind::UvWorkspace,
-    PythonEnvironmentKind::Uv,
     PythonEnvironmentKind::Poetry,
     PythonEnvironmentKind::Pipenv,
     PythonEnvironmentKind::VirtualEnvWrapper,

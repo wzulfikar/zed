@@ -20,7 +20,6 @@ client.workspace = true
 gpui.workspace = true
 human_bytes.workspace = true
 release_channel.workspace = true
-semver.workspace = true
 serde.workspace = true
 sysinfo.workspace = true
 

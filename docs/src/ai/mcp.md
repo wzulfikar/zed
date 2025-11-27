@@ -40,12 +40,12 @@ You can connect them by adding their commands directly to your `settings.json`, 
 ```json [settings]
 {
   "context_servers": {
-    "local-mcp-server": {
+    "run-command": {
       "command": "some-command",
       "args": ["arg-1", "arg-2"],
       "env": {}
     },
-    "remote-mcp-server": {
+    "over-http": {
       "url": "custom",
       "headers": { "Authorization": "Bearer <token>" }
     }

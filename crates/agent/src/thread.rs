@@ -113,7 +113,6 @@ impl Message {
                 role: Role::User,
                 content: vec!["Continue where you left off".into()],
                 cache: false,
-                reasoning_details: None,
             }],
         }
     }
@@ -178,7 +177,6 @@ impl UserMessage {
             role: Role::User,
             content: Vec::with_capacity(self.content.len()),
             cache: false,
-            reasoning_details: None,
         };
 
         const OPEN_CONTEXT: &str = "<context>\n\
@@ -446,7 +444,6 @@ impl AgentMessage {
             role: Role::Assistant,
             content: Vec::with_capacity(self.content.len()),
             cache: false,
-            reasoning_details: self.reasoning_details.clone(),
         };
         for chunk in &self.content {
             match chunk {
@@ -482,7 +479,6 @@ impl AgentMessage {
             role: Role::User,
             content: Vec::new(),
             cache: false,
-            reasoning_details: None,
         };
 
         for tool_result in self.tool_results.values() {
@@ -512,7 +508,6 @@ impl AgentMessage {
 pub struct AgentMessage {
     pub content: Vec<AgentMessageContent>,
     pub tool_results: IndexMap<LanguageModelToolUseId, LanguageModelToolResult>,
-    pub reasoning_details: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1403,18 +1398,6 @@ impl Thread {
                 self.handle_thinking_event(text, signature, event_stream, cx)
             }
             RedactedThinking { data } => self.handle_redacted_thinking_event(data, cx),
-            ReasoningDetails(details) => {
-                let last_message = self.pending_message();
-                // Store the last non-empty reasoning_details (overwrites earlier ones)
-                // This ensures we keep the encrypted reasoning with signatures, not the early text reasoning
-                if let serde_json::Value::Array(ref arr) = details {
-                    if !arr.is_empty() {
-                        last_message.reasoning_details = Some(details);
-                    }
-                } else {
-                    last_message.reasoning_details = Some(details);
-                }
-            }
             ToolUse(tool_use) => {
                 return Ok(self.handle_tool_use_event(tool_use, event_stream, cx));
             }
@@ -1690,7 +1673,6 @@ impl Thread {
             role: Role::User,
             content: vec![SUMMARIZE_THREAD_DETAILED_PROMPT.into()],
             cache: false,
-            reasoning_details: None,
         });
 
         let task = cx
@@ -1755,7 +1737,6 @@ impl Thread {
             role: Role::User,
             content: vec![SUMMARIZE_THREAD_PROMPT.into()],
             cache: false,
-            reasoning_details: None,
         });
         self.pending_title_generation = Some(cx.spawn(async move |this, cx| {
             let mut title = String::new();
@@ -2003,7 +1984,6 @@ impl Thread {
             role: Role::System,
             content: vec![system_prompt.into()],
             cache: false,
-            reasoning_details: None,
         }];
         for message in &self.messages {
             messages.extend(message.to_request());

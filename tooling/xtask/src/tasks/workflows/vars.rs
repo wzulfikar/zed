@@ -1,9 +1,6 @@
 use std::cell::RefCell;
 
-use gh_workflow::{
-    Concurrency, Env, Expression, Step, WorkflowCallInput, WorkflowCallSecret,
-    WorkflowDispatchInput,
-};
+use gh_workflow::{Concurrency, Env, Expression, Step, WorkflowDispatchInput};
 
 use crate::tasks::workflows::{runners::Platform, steps::NamedJob};
 
@@ -135,7 +132,7 @@ impl PathCondition {
 }
 
 pub(crate) struct StepOutput {
-    pub name: &'static str,
+    name: &'static str,
     step_id: String,
 }
 
@@ -154,13 +151,6 @@ impl StepOutput {
     pub fn expr(&self) -> String {
         format!("steps.{}.outputs.{}", self.step_id, self.name)
     }
-
-    pub fn as_job_output(self, job: &NamedJob) -> JobOutput {
-        JobOutput {
-            job_name: job.name.clone(),
-            name: self.name,
-        }
-    }
 }
 
 impl serde::Serialize for StepOutput {
@@ -174,43 +164,17 @@ impl serde::Serialize for StepOutput {
 
 impl std::fmt::Display for StepOutput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "${{{{ {} }}}}", self.expr())
+        write!(f, "${{{{ steps.{}.outputs.{} }}}}", self.step_id, self.name)
     }
 }
 
-pub(crate) struct JobOutput {
-    job_name: String,
-    name: &'static str,
-}
-
-impl JobOutput {
-    pub fn expr(&self) -> String {
-        format!("needs.{}.outputs.{}", self.job_name, self.name)
-    }
-}
-
-impl serde::Serialize for JobOutput {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&self.to_string())
-    }
-}
-
-impl std::fmt::Display for JobOutput {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "${{{{ {} }}}}", self.expr())
-    }
-}
-
-pub struct WorkflowInput {
+pub struct Input {
     pub input_type: &'static str,
     pub name: &'static str,
     pub default: Option<String>,
 }
 
-impl WorkflowInput {
+impl Input {
     pub fn string(name: &'static str, default: Option<String>) -> Self {
         Self {
             input_type: "string",
@@ -227,62 +191,15 @@ impl WorkflowInput {
             default: self.default.clone(),
         }
     }
-
-    pub fn call_input(&self) -> WorkflowCallInput {
-        WorkflowCallInput {
-            description: self.name.to_owned(),
-            required: self.default.is_none(),
-            input_type: self.input_type.to_owned(),
-            default: self.default.clone(),
-        }
-    }
 }
 
-impl std::fmt::Display for WorkflowInput {
+impl std::fmt::Display for Input {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "${{{{ inputs.{} }}}}", self.name)
     }
 }
 
-impl serde::Serialize for WorkflowInput {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&self.to_string())
-    }
-}
-
-pub(crate) struct WorkflowSecret {
-    pub name: &'static str,
-    description: String,
-    required: bool,
-}
-
-impl WorkflowSecret {
-    pub fn new(name: &'static str, description: impl ToString) -> Self {
-        Self {
-            name,
-            description: description.to_string(),
-            required: true,
-        }
-    }
-
-    pub fn secret_configuration(&self) -> WorkflowCallSecret {
-        WorkflowCallSecret {
-            description: self.description.clone(),
-            required: self.required,
-        }
-    }
-}
-
-impl std::fmt::Display for WorkflowSecret {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "${{{{ secrets.{} }}}}", self.name)
-    }
-}
-
-impl serde::Serialize for WorkflowSecret {
+impl serde::Serialize for Input {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,

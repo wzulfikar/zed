@@ -1,9 +1,10 @@
+//! # system_specs
+
 use client::telemetry;
 pub use gpui::GpuSpecs;
-use gpui::{App, AppContext as _, Task, Window, actions};
+use gpui::{App, AppContext as _, SemanticVersion, Task, Window, actions};
 use human_bytes::human_bytes;
 use release_channel::{AppCommitSha, AppVersion, ReleaseChannel};
-use semver::Version;
 use serde::Serialize;
 use std::{env, fmt::Display};
 use sysinfo::{MemoryRefreshKind, RefreshKind, System};
@@ -71,7 +72,7 @@ impl SystemSpecs {
     }
 
     pub fn new_stateless(
-        app_version: Version,
+        app_version: SemanticVersion,
         app_commit_sha: Option<AppCommitSha>,
         release_channel: ReleaseChannel,
     ) -> Self {

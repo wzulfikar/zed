@@ -78,7 +78,6 @@ pub enum EditPredictionProvider {
 }
 
 pub const EXPERIMENTAL_SWEEP_EDIT_PREDICTION_PROVIDER_NAME: &str = "sweep";
-pub const EXPERIMENTAL_ZETA2_EDIT_PREDICTION_PROVIDER_NAME: &str = "zeta2";
 
 impl<'de> Deserialize<'de> for EditPredictionProvider {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -102,25 +101,17 @@ impl<'de> Deserialize<'de> for EditPredictionProvider {
             Content::Supermaven => EditPredictionProvider::Supermaven,
             Content::Zed => EditPredictionProvider::Zed,
             Content::Codestral => EditPredictionProvider::Codestral,
-            Content::Experimental(name)
-                if name == EXPERIMENTAL_SWEEP_EDIT_PREDICTION_PROVIDER_NAME =>
-            {
-                EditPredictionProvider::Experimental(
-                    EXPERIMENTAL_SWEEP_EDIT_PREDICTION_PROVIDER_NAME,
-                )
-            }
-            Content::Experimental(name)
-                if name == EXPERIMENTAL_ZETA2_EDIT_PREDICTION_PROVIDER_NAME =>
-            {
-                EditPredictionProvider::Experimental(
-                    EXPERIMENTAL_ZETA2_EDIT_PREDICTION_PROVIDER_NAME,
-                )
-            }
             Content::Experimental(name) => {
-                return Err(D::Error::custom(format!(
-                    "Unknown experimental edit prediction provider: {}",
-                    name
-                )));
+                if name == EXPERIMENTAL_SWEEP_EDIT_PREDICTION_PROVIDER_NAME {
+                    EditPredictionProvider::Experimental(
+                        EXPERIMENTAL_SWEEP_EDIT_PREDICTION_PROVIDER_NAME,
+                    )
+                } else {
+                    return Err(D::Error::custom(format!(
+                        "Unknown experimental edit prediction provider: {}",
+                        name
+                    )));
+                }
             }
         })
     }

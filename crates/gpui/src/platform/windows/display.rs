@@ -63,21 +63,22 @@ impl WindowsDisplay {
         })
     }
 
-    pub fn new_with_handle(monitor: HMONITOR) -> anyhow::Result<Self> {
-        let info = get_monitor_info(monitor)?;
+    pub fn new_with_handle(monitor: HMONITOR) -> Self {
+        let info = get_monitor_info(monitor).expect("unable to get monitor info");
         let monitor_size = info.monitorInfo.rcMonitor;
         let uuid = generate_uuid(&info.szDevice);
         let display_id = available_monitors()
             .iter()
             .position(|handle| handle.0 == monitor.0)
             .unwrap();
-        let scale_factor = get_scale_factor_for_monitor(monitor)?;
+        let scale_factor =
+            get_scale_factor_for_monitor(monitor).expect("unable to get scale factor for monitor");
         let physical_size = size(
             (monitor_size.right - monitor_size.left).into(),
             (monitor_size.bottom - monitor_size.top).into(),
         );
 
-        Ok(WindowsDisplay {
+        WindowsDisplay {
             handle: monitor,
             display_id: DisplayId(display_id as _),
             scale_factor,
@@ -94,20 +95,21 @@ impl WindowsDisplay {
                 size: physical_size,
             },
             uuid,
-        })
+        }
     }
 
-    fn new_with_handle_and_id(handle: HMONITOR, display_id: DisplayId) -> anyhow::Result<Self> {
-        let info = get_monitor_info(handle)?;
+    fn new_with_handle_and_id(handle: HMONITOR, display_id: DisplayId) -> Self {
+        let info = get_monitor_info(handle).expect("unable to get monitor info");
         let monitor_size = info.monitorInfo.rcMonitor;
         let uuid = generate_uuid(&info.szDevice);
-        let scale_factor = get_scale_factor_for_monitor(handle)?;
+        let scale_factor =
+            get_scale_factor_for_monitor(handle).expect("unable to get scale factor for monitor");
         let physical_size = size(
             (monitor_size.right - monitor_size.left).into(),
             (monitor_size.bottom - monitor_size.top).into(),
         );
 
-        Ok(WindowsDisplay {
+        WindowsDisplay {
             handle,
             display_id,
             scale_factor,
@@ -124,7 +126,7 @@ impl WindowsDisplay {
                 size: physical_size,
             },
             uuid,
-        })
+        }
     }
 
     pub fn primary_monitor() -> Option<Self> {
@@ -138,7 +140,7 @@ impl WindowsDisplay {
             );
             return None;
         }
-        WindowsDisplay::new_with_handle(monitor).log_err()
+        Some(WindowsDisplay::new_with_handle(monitor))
     }
 
     /// Check if the center point of given bounds is inside this monitor
@@ -152,9 +154,7 @@ impl WindowsDisplay {
         if monitor.is_invalid() {
             false
         } else {
-            let Ok(display) = WindowsDisplay::new_with_handle(monitor) else {
-                return false;
-            };
+            let display = WindowsDisplay::new_with_handle(monitor);
             display.uuid == self.uuid
         }
     }
@@ -163,10 +163,11 @@ impl WindowsDisplay {
         available_monitors()
             .into_iter()
             .enumerate()
-            .filter_map(|(id, handle)| {
-                Some(Rc::new(
-                    WindowsDisplay::new_with_handle_and_id(handle, DisplayId(id as _)).ok()?,
-                ) as Rc<dyn PlatformDisplay>)
+            .map(|(id, handle)| {
+                Rc::new(WindowsDisplay::new_with_handle_and_id(
+                    handle,
+                    DisplayId(id as _),
+                )) as Rc<dyn PlatformDisplay>
             })
             .collect()
     }

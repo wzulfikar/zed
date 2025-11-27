@@ -389,12 +389,11 @@ impl Platform for WindowsPlatform {
         #[allow(
             clippy::disallowed_methods,
             reason = "We are restarting ourselves, using std command thus is fine"
-        )] // todo(shell): There might be no powershell on the system
-        let restart_process =
-            util::command::new_std_command(util::shell::get_windows_system_shell())
-                .arg("-command")
-                .arg(script)
-                .spawn();
+        )]
+        let restart_process = util::command::new_std_command("powershell.exe")
+            .arg("-command")
+            .arg(script)
+            .spawn();
 
         match restart_process {
             Ok(_) => self.quit(),
@@ -642,23 +641,14 @@ impl Platform for WindowsPlatform {
             .collect_vec();
         self.foreground_executor().spawn(async move {
             let mut credentials: *mut CREDENTIALW = std::ptr::null_mut();
-            let result = unsafe {
+            unsafe {
                 CredReadW(
                     PCWSTR::from_raw(target_name.as_ptr()),
                     CRED_TYPE_GENERIC,
                     None,
                     &mut credentials,
-                )
+                )?
             };
-
-            if let Err(err) = result {
-                // ERROR_NOT_FOUND means the credential doesn't exist.
-                // Return Ok(None) to match macOS and Linux behavior.
-                if err.code().0 == ERROR_NOT_FOUND.0 as i32 {
-                    return Ok(None);
-                }
-                return Err(err.into());
-            }
 
             if credentials.is_null() {
                 Ok(None)

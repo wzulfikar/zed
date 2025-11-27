@@ -1,18 +1,8 @@
-use crate::{EditPrediction, EditPredictionRating, Zeta};
-use buffer_diff::{BufferDiff, BufferDiffSnapshot};
-use cloud_zeta2_prompt::write_codeblock;
-use editor::{Editor, ExcerptRange, MultiBuffer};
-use gpui::{
-    App, BorderStyle, DismissEvent, EdgesRefinement, Entity, EventEmitter, FocusHandle, Focusable,
-    Length, StyleRefinement, TextStyleRefinement, Window, actions, prelude::*,
-};
-use language::{LanguageRegistry, Point, language_settings};
-use markdown::{Markdown, MarkdownStyle};
-use settings::Settings as _;
-use std::fmt::Write;
-use std::sync::Arc;
+use crate::{CompletionDiffElement, EditPrediction, EditPredictionRating, Zeta};
+use editor::Editor;
+use gpui::{App, DismissEvent, Entity, EventEmitter, FocusHandle, Focusable, actions, prelude::*};
+use language::language_settings;
 use std::time::Duration;
-use theme::ThemeSettings;
 use ui::{KeyBinding, List, ListItem, ListItemSpacing, Tooltip, prelude::*};
 use workspace::{ModalView, Workspace};
 
@@ -20,44 +10,41 @@ actions!(
     zeta,
     [
         /// Rates the active completion with a thumbs up.
-        ThumbsUpActivePrediction,
+        ThumbsUpActiveCompletion,
         /// Rates the active completion with a thumbs down.
-        ThumbsDownActivePrediction,
+        ThumbsDownActiveCompletion,
         /// Navigates to the next edit in the completion history.
         NextEdit,
         /// Navigates to the previous edit in the completion history.
         PreviousEdit,
         /// Focuses on the completions list.
-        FocusPredictions,
+        FocusCompletions,
         /// Previews the selected completion.
-        PreviewPrediction,
+        PreviewCompletion,
     ]
 );
 
-pub struct RatePredictionsModal {
+pub struct RateCompletionModal {
     zeta: Entity<Zeta>,
-    language_registry: Arc<LanguageRegistry>,
-    active_prediction: Option<ActivePrediction>,
+    active_completion: Option<ActiveCompletion>,
     selected_index: usize,
-    diff_editor: Entity<Editor>,
     focus_handle: FocusHandle,
     _subscription: gpui::Subscription,
-    current_view: RatePredictionView,
+    current_view: RateCompletionView,
 }
 
-struct ActivePrediction {
-    prediction: EditPrediction,
+struct ActiveCompletion {
+    completion: EditPrediction,
     feedback_editor: Entity<Editor>,
-    formatted_inputs: Entity<Markdown>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-enum RatePredictionView {
+enum RateCompletionView {
     SuggestedEdits,
     RawInput,
 }
 
-impl RatePredictionView {
+impl RateCompletionView {
     pub fn name(&self) -> &'static str {
         match self {
             Self::SuggestedEdits => "Suggested Edits",
@@ -66,42 +53,25 @@ impl RatePredictionView {
     }
 }
 
-impl RatePredictionsModal {
+impl RateCompletionModal {
     pub fn toggle(workspace: &mut Workspace, window: &mut Window, cx: &mut Context<Workspace>) {
-        if let Some(zeta) = Zeta::try_global(cx) {
-            let language_registry = workspace.app_state().languages.clone();
-            workspace.toggle_modal(window, cx, |window, cx| {
-                RatePredictionsModal::new(zeta, language_registry, window, cx)
-            });
+        if let Some(zeta) = Zeta::global(cx) {
+            workspace.toggle_modal(window, cx, |_window, cx| RateCompletionModal::new(zeta, cx));
 
-            telemetry::event!("Rate Prediction Modal Open", source = "Edit Prediction");
+            telemetry::event!("Rate Completion Modal Open", source = "Edit Prediction");
         }
     }
 
-    pub fn new(
-        zeta: Entity<Zeta>,
-        language_registry: Arc<LanguageRegistry>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
+    pub fn new(zeta: Entity<Zeta>, cx: &mut Context<Self>) -> Self {
         let subscription = cx.observe(&zeta, |_, _, cx| cx.notify());
 
         Self {
             zeta,
-            language_registry,
             selected_index: 0,
             focus_handle: cx.focus_handle(),
-            active_prediction: None,
+            active_completion: None,
             _subscription: subscription,
-            diff_editor: cx.new(|cx| {
-                let multibuffer = cx.new(|_| MultiBuffer::new(language::Capability::ReadOnly));
-                let mut editor = Editor::for_multibuffer(multibuffer, None, window, cx);
-                editor.disable_inline_diagnostics();
-                editor.set_expand_all_diff_hunks(cx);
-                editor.set_show_git_diff_gutter(false, cx);
-                editor
-            }),
-            current_view: RatePredictionView::SuggestedEdits,
+            current_view: RateCompletionView::SuggestedEdits,
         }
     }
 
@@ -113,7 +83,7 @@ impl RatePredictionsModal {
         self.selected_index += 1;
         self.selected_index = usize::min(
             self.selected_index,
-            self.zeta.read(cx).shown_predictions().count(),
+            self.zeta.read(cx).shown_completions().count(),
         );
         cx.notify();
     }
@@ -132,7 +102,7 @@ impl RatePredictionsModal {
         let next_index = self
             .zeta
             .read(cx)
-            .shown_predictions()
+            .shown_completions()
             .skip(self.selected_index)
             .enumerate()
             .skip(1) // Skip straight to the next item
@@ -152,7 +122,7 @@ impl RatePredictionsModal {
         let prev_index = self
             .zeta
             .read(cx)
-            .shown_predictions()
+            .shown_completions()
             .rev()
             .skip((completions_len - 1) - self.selected_index)
             .enumerate()
@@ -179,14 +149,14 @@ impl RatePredictionsModal {
 
     pub fn thumbs_up_active(
         &mut self,
-        _: &ThumbsUpActivePrediction,
+        _: &ThumbsUpActiveCompletion,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.zeta.update(cx, |zeta, cx| {
-            if let Some(active) = &self.active_prediction {
-                zeta.rate_prediction(
-                    &active.prediction,
+            if let Some(active) = &self.active_completion {
+                zeta.rate_completion(
+                    &active.completion,
                     EditPredictionRating::Positive,
                     active.feedback_editor.read(cx).text(cx),
                     cx,
@@ -195,9 +165,9 @@ impl RatePredictionsModal {
         });
 
         let current_completion = self
-            .active_prediction
+            .active_completion
             .as_ref()
-            .map(|completion| completion.prediction.clone());
+            .map(|completion| completion.completion.clone());
         self.select_completion(current_completion, false, window, cx);
         self.select_next_edit(&Default::default(), window, cx);
         self.confirm(&Default::default(), window, cx);
@@ -207,18 +177,18 @@ impl RatePredictionsModal {
 
     pub fn thumbs_down_active(
         &mut self,
-        _: &ThumbsDownActivePrediction,
+        _: &ThumbsDownActiveCompletion,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(active) = &self.active_prediction {
+        if let Some(active) = &self.active_completion {
             if active.feedback_editor.read(cx).text(cx).is_empty() {
                 return;
             }
 
             self.zeta.update(cx, |zeta, cx| {
-                zeta.rate_prediction(
-                    &active.prediction,
+                zeta.rate_completion(
+                    &active.completion,
                     EditPredictionRating::Negative,
                     active.feedback_editor.read(cx).text(cx),
                     cx,
@@ -227,9 +197,9 @@ impl RatePredictionsModal {
         }
 
         let current_completion = self
-            .active_prediction
+            .active_completion
             .as_ref()
-            .map(|completion| completion.prediction.clone());
+            .map(|completion| completion.completion.clone());
         self.select_completion(current_completion, false, window, cx);
         self.select_next_edit(&Default::default(), window, cx);
         self.confirm(&Default::default(), window, cx);
@@ -239,7 +209,7 @@ impl RatePredictionsModal {
 
     fn focus_completions(
         &mut self,
-        _: &FocusPredictions,
+        _: &FocusCompletions,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -249,14 +219,14 @@ impl RatePredictionsModal {
 
     fn preview_completion(
         &mut self,
-        _: &PreviewPrediction,
+        _: &PreviewCompletion,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let completion = self
             .zeta
             .read(cx)
-            .shown_predictions()
+            .shown_completions()
             .skip(self.selected_index)
             .take(1)
             .next()
@@ -269,7 +239,7 @@ impl RatePredictionsModal {
         let completion = self
             .zeta
             .read(cx)
-            .shown_predictions()
+            .shown_completions()
             .skip(self.selected_index)
             .take(1)
             .next()
@@ -280,145 +250,54 @@ impl RatePredictionsModal {
 
     pub fn select_completion(
         &mut self,
-        prediction: Option<EditPrediction>,
+        completion: Option<EditPrediction>,
         focus: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         // Avoid resetting completion rating if it's already selected.
-        if let Some(prediction) = prediction {
+        if let Some(completion) = completion.as_ref() {
             self.selected_index = self
                 .zeta
                 .read(cx)
-                .shown_predictions()
+                .shown_completions()
                 .enumerate()
-                .find(|(_, completion_b)| prediction.id == completion_b.id)
+                .find(|(_, completion_b)| completion.id == completion_b.id)
                 .map(|(ix, _)| ix)
                 .unwrap_or(self.selected_index);
             cx.notify();
 
-            if let Some(prev_prediction) = self.active_prediction.as_ref()
-                && prediction.id == prev_prediction.prediction.id
+            if let Some(prev_completion) = self.active_completion.as_ref()
+                && completion.id == prev_completion.completion.id
             {
                 if focus {
-                    window.focus(&prev_prediction.feedback_editor.focus_handle(cx));
+                    window.focus(&prev_completion.feedback_editor.focus_handle(cx));
                 }
                 return;
             }
-
-            self.diff_editor.update(cx, |editor, cx| {
-                let new_buffer = prediction.edit_preview.build_result_buffer(cx);
-                let new_buffer_snapshot = new_buffer.read(cx).snapshot();
-                let old_buffer_snapshot = prediction.snapshot.clone();
-                let new_buffer_id = new_buffer_snapshot.remote_id();
-
-                let range = prediction
-                    .edit_preview
-                    .compute_visible_range(&prediction.edits)
-                    .unwrap_or(Point::zero()..Point::zero());
-                let start = Point::new(range.start.row.saturating_sub(5), 0);
-                let end = Point::new(range.end.row + 5, 0).min(new_buffer_snapshot.max_point());
-
-                let diff = cx.new::<BufferDiff>(|cx| {
-                    let diff_snapshot = BufferDiffSnapshot::new_with_base_buffer(
-                        new_buffer_snapshot.text.clone(),
-                        Some(old_buffer_snapshot.text().into()),
-                        old_buffer_snapshot.clone(),
-                        cx,
-                    );
-                    let diff = BufferDiff::new(&new_buffer_snapshot, cx);
-                    cx.spawn(async move |diff, cx| {
-                        let diff_snapshot = diff_snapshot.await;
-                        diff.update(cx, |diff, cx| {
-                            diff.set_snapshot(diff_snapshot, &new_buffer_snapshot.text, cx);
-                        })
-                    })
-                    .detach();
-                    diff
-                });
-
-                editor.disable_header_for_buffer(new_buffer_id, cx);
-                editor.buffer().update(cx, |multibuffer, cx| {
-                    multibuffer.clear(cx);
-                    multibuffer.push_excerpts(
-                        new_buffer,
-                        vec![ExcerptRange {
-                            context: start..end,
-                            primary: start..end,
-                        }],
-                        cx,
-                    );
-                    multibuffer.add_diff(diff, cx);
-                });
-            });
-
-            let mut formatted_inputs = String::new();
-
-            write!(&mut formatted_inputs, "## Events\n\n").unwrap();
-
-            for event in &prediction.inputs.events {
-                write!(&mut formatted_inputs, "```diff\n{event}```\n\n").unwrap();
-            }
-
-            write!(&mut formatted_inputs, "## Included files\n\n").unwrap();
-
-            for included_file in &prediction.inputs.included_files {
-                let cursor_insertions = &[(prediction.inputs.cursor_point, "<|CURSOR|>")];
-
-                write!(
-                    &mut formatted_inputs,
-                    "### {}\n\n",
-                    included_file.path.display()
-                )
-                .unwrap();
-
-                write_codeblock(
-                    &included_file.path,
-                    &included_file.excerpts,
-                    if included_file.path == prediction.inputs.cursor_path {
-                        cursor_insertions
-                    } else {
-                        &[]
-                    },
-                    included_file.max_row,
-                    false,
-                    &mut formatted_inputs,
-                );
-            }
-
-            self.active_prediction = Some(ActivePrediction {
-                prediction,
-                feedback_editor: cx.new(|cx| {
-                    let mut editor = Editor::multi_line(window, cx);
-                    editor.disable_scrollbars_and_minimap(window, cx);
-                    editor.set_soft_wrap_mode(language_settings::SoftWrap::EditorWidth, cx);
-                    editor.set_show_line_numbers(false, cx);
-                    editor.set_show_git_diff_gutter(false, cx);
-                    editor.set_show_code_actions(false, cx);
-                    editor.set_show_runnables(false, cx);
-                    editor.set_show_breakpoints(false, cx);
-                    editor.set_show_wrap_guides(false, cx);
-                    editor.set_show_indent_guides(false, cx);
-                    editor.set_show_edit_predictions(Some(false), window, cx);
-                    editor.set_placeholder_text("Add your feedback…", window, cx);
-                    if focus {
-                        cx.focus_self(window);
-                    }
-                    editor
-                }),
-                formatted_inputs: cx.new(|cx| {
-                    Markdown::new(
-                        formatted_inputs.into(),
-                        Some(self.language_registry.clone()),
-                        None,
-                        cx,
-                    )
-                }),
-            });
-        } else {
-            self.active_prediction = None;
         }
 
+        self.active_completion = completion.map(|completion| ActiveCompletion {
+            completion,
+            feedback_editor: cx.new(|cx| {
+                let mut editor = Editor::multi_line(window, cx);
+                editor.disable_scrollbars_and_minimap(window, cx);
+                editor.set_soft_wrap_mode(language_settings::SoftWrap::EditorWidth, cx);
+                editor.set_show_line_numbers(false, cx);
+                editor.set_show_git_diff_gutter(false, cx);
+                editor.set_show_code_actions(false, cx);
+                editor.set_show_runnables(false, cx);
+                editor.set_show_breakpoints(false, cx);
+                editor.set_show_wrap_guides(false, cx);
+                editor.set_show_indent_guides(false, cx);
+                editor.set_show_edit_predictions(Some(false), window, cx);
+                editor.set_placeholder_text("Add your feedback…", window, cx);
+                if focus {
+                    cx.focus_self(window);
+                }
+                editor
+            }),
+        });
         cx.notify();
     }
 
@@ -433,31 +312,33 @@ impl RatePredictionsModal {
             .child(
                 Button::new(
                     ElementId::Name("suggested-edits".into()),
-                    RatePredictionView::SuggestedEdits.name(),
+                    RateCompletionView::SuggestedEdits.name(),
                 )
                 .label_size(LabelSize::Small)
                 .on_click(cx.listener(move |this, _, _window, cx| {
-                    this.current_view = RatePredictionView::SuggestedEdits;
+                    this.current_view = RateCompletionView::SuggestedEdits;
                     cx.notify();
                 }))
-                .toggle_state(self.current_view == RatePredictionView::SuggestedEdits),
+                .toggle_state(self.current_view == RateCompletionView::SuggestedEdits),
             )
             .child(
                 Button::new(
                     ElementId::Name("raw-input".into()),
-                    RatePredictionView::RawInput.name(),
+                    RateCompletionView::RawInput.name(),
                 )
                 .label_size(LabelSize::Small)
                 .on_click(cx.listener(move |this, _, _window, cx| {
-                    this.current_view = RatePredictionView::RawInput;
+                    this.current_view = RateCompletionView::RawInput;
                     cx.notify();
                 }))
-                .toggle_state(self.current_view == RatePredictionView::RawInput),
+                .toggle_state(self.current_view == RateCompletionView::RawInput),
             )
     }
 
     fn render_suggested_edits(&self, cx: &mut Context<Self>) -> Option<gpui::Stateful<Div>> {
+        let active_completion = self.active_completion.as_ref()?;
         let bg_color = cx.theme().colors().editor_background;
+
         Some(
             div()
                 .id("diff")
@@ -466,18 +347,14 @@ impl RatePredictionsModal {
                 .bg(bg_color)
                 .overflow_scroll()
                 .whitespace_nowrap()
-                .child(self.diff_editor.clone()),
+                .child(CompletionDiffElement::new(
+                    &active_completion.completion,
+                    cx,
+                )),
         )
     }
 
-    fn render_raw_input(
-        &self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Option<gpui::Stateful<Div>> {
-        let theme_settings = ThemeSettings::get_global(cx);
-        let buffer_font_size = theme_settings.buffer_font_size(cx);
-
+    fn render_raw_input(&self, cx: &mut Context<Self>) -> Option<gpui::Stateful<Div>> {
         Some(
             v_flex()
                 .size_full()
@@ -491,81 +368,30 @@ impl RatePredictionsModal {
                         .size_full()
                         .bg(cx.theme().colors().editor_background)
                         .overflow_scroll()
-                        .child(if let Some(active_prediction) = &self.active_prediction {
-                            markdown::MarkdownElement::new(
-                                active_prediction.formatted_inputs.clone(),
-                                MarkdownStyle {
-                                    base_text_style: window.text_style(),
-                                    syntax: cx.theme().syntax().clone(),
-                                    code_block: StyleRefinement {
-                                        text: Some(TextStyleRefinement {
-                                            font_family: Some(
-                                                theme_settings.buffer_font.family.clone(),
-                                            ),
-                                            font_size: Some(buffer_font_size.into()),
-                                            ..Default::default()
-                                        }),
-                                        padding: EdgesRefinement {
-                                            top: Some(DefiniteLength::Absolute(
-                                                AbsoluteLength::Pixels(px(8.)),
-                                            )),
-                                            left: Some(DefiniteLength::Absolute(
-                                                AbsoluteLength::Pixels(px(8.)),
-                                            )),
-                                            right: Some(DefiniteLength::Absolute(
-                                                AbsoluteLength::Pixels(px(8.)),
-                                            )),
-                                            bottom: Some(DefiniteLength::Absolute(
-                                                AbsoluteLength::Pixels(px(8.)),
-                                            )),
-                                        },
-                                        margin: EdgesRefinement {
-                                            top: Some(Length::Definite(px(8.).into())),
-                                            left: Some(Length::Definite(px(0.).into())),
-                                            right: Some(Length::Definite(px(0.).into())),
-                                            bottom: Some(Length::Definite(px(12.).into())),
-                                        },
-                                        border_style: Some(BorderStyle::Solid),
-                                        border_widths: EdgesRefinement {
-                                            top: Some(AbsoluteLength::Pixels(px(1.))),
-                                            left: Some(AbsoluteLength::Pixels(px(1.))),
-                                            right: Some(AbsoluteLength::Pixels(px(1.))),
-                                            bottom: Some(AbsoluteLength::Pixels(px(1.))),
-                                        },
-                                        border_color: Some(cx.theme().colors().border_variant),
-                                        background: Some(
-                                            cx.theme().colors().editor_background.into(),
-                                        ),
-                                        ..Default::default()
-                                    },
-                                    ..Default::default()
-                                },
+                        .child(if let Some(active_completion) = &self.active_completion {
+                            format!(
+                                "{}\n{}",
+                                active_completion.completion.input_events,
+                                active_completion.completion.input_excerpt
                             )
-                            .into_any_element()
                         } else {
-                            div()
-                                .child("No active completion".to_string())
-                                .into_any_element()
+                            "No active completion".to_string()
                         }),
                 )
                 .id("raw-input-view"),
         )
     }
 
-    fn render_active_completion(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Option<impl IntoElement> {
-        let active_prediction = self.active_prediction.as_ref()?;
-        let completion_id = active_prediction.prediction.id.clone();
+    fn render_active_completion(&mut self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+        let active_completion = self.active_completion.as_ref()?;
+        let completion_id = active_completion.completion.id;
         let focus_handle = &self.focus_handle(cx);
 
         let border_color = cx.theme().colors().border;
         let bg_color = cx.theme().colors().editor_background;
 
-        let rated = self.zeta.read(cx).is_prediction_rated(&completion_id);
-        let feedback_empty = active_prediction
+        let rated = self.zeta.read(cx).is_completion_rated(completion_id);
+        let feedback_empty = active_completion
             .feedback_editor
             .read(cx)
             .text(cx)
@@ -586,10 +412,10 @@ impl RatePredictionsModal {
                         .child(self.render_view_nav(cx))
                         .when_some(
                             match self.current_view {
-                                RatePredictionView::SuggestedEdits => {
+                                RateCompletionView::SuggestedEdits => {
                                     self.render_suggested_edits(cx)
                                 }
-                                RatePredictionView::RawInput => self.render_raw_input(window, cx),
+                                RateCompletionView::RawInput => self.render_raw_input(cx),
                             },
                             |this, element| this.child(element),
                         ),
@@ -624,7 +450,7 @@ impl RatePredictionsModal {
                             .h_40()
                             .pt_1()
                             .bg(bg_color)
-                            .child(active_prediction.feedback_editor.clone()),
+                            .child(active_completion.feedback_editor.clone()),
                     )
                 })
                 .child(
@@ -646,7 +472,7 @@ impl RatePredictionsModal {
                                     )
                                     .child(Label::new("Rated completion.").color(Color::Muted)),
                             )
-                        } else if active_prediction.prediction.edits.is_empty() {
+                        } else if active_completion.completion.edits.is_empty() {
                             Some(
                                 label_container
                                     .child(
@@ -663,7 +489,7 @@ impl RatePredictionsModal {
                             h_flex()
                                 .gap_1()
                                 .child(
-                                    Button::new("bad", "Bad Prediction")
+                                    Button::new("bad", "Bad Completion")
                                         .icon(IconName::ThumbsDown)
                                         .icon_size(IconSize::Small)
                                         .icon_position(IconPosition::Start)
@@ -674,14 +500,14 @@ impl RatePredictionsModal {
                                             ))
                                         })
                                         .key_binding(KeyBinding::for_action_in(
-                                            &ThumbsDownActivePrediction,
+                                            &ThumbsDownActiveCompletion,
                                             focus_handle,
                                             cx,
                                         ))
                                         .on_click(cx.listener(move |this, _, window, cx| {
-                                            if this.active_prediction.is_some() {
+                                            if this.active_completion.is_some() {
                                                 this.thumbs_down_active(
-                                                    &ThumbsDownActivePrediction,
+                                                    &ThumbsDownActiveCompletion,
                                                     window,
                                                     cx,
                                                 );
@@ -689,20 +515,20 @@ impl RatePredictionsModal {
                                         })),
                                 )
                                 .child(
-                                    Button::new("good", "Good Prediction")
+                                    Button::new("good", "Good Completion")
                                         .icon(IconName::ThumbsUp)
                                         .icon_size(IconSize::Small)
                                         .icon_position(IconPosition::Start)
                                         .disabled(rated)
                                         .key_binding(KeyBinding::for_action_in(
-                                            &ThumbsUpActivePrediction,
+                                            &ThumbsUpActiveCompletion,
                                             focus_handle,
                                             cx,
                                         ))
                                         .on_click(cx.listener(move |this, _, window, cx| {
-                                            if this.active_prediction.is_some() {
+                                            if this.active_completion.is_some() {
                                                 this.thumbs_up_active(
-                                                    &ThumbsUpActivePrediction,
+                                                    &ThumbsUpActiveCompletion,
                                                     window,
                                                     cx,
                                                 );
@@ -717,32 +543,34 @@ impl RatePredictionsModal {
     fn render_shown_completions(&self, cx: &Context<Self>) -> impl Iterator<Item = ListItem> {
         self.zeta
             .read(cx)
-            .shown_predictions()
+            .shown_completions()
             .cloned()
             .enumerate()
             .map(|(index, completion)| {
                 let selected = self
-                    .active_prediction
+                    .active_completion
                     .as_ref()
-                    .is_some_and(|selected| selected.prediction.id == completion.id);
-                let rated = self.zeta.read(cx).is_prediction_rated(&completion.id);
+                    .is_some_and(|selected| selected.completion.id == completion.id);
+                let rated = self.zeta.read(cx).is_completion_rated(completion.id);
 
                 let (icon_name, icon_color, tooltip_text) =
                     match (rated, completion.edits.is_empty()) {
-                        (true, _) => (IconName::Check, Color::Success, "Rated Prediction"),
+                        (true, _) => (IconName::Check, Color::Success, "Rated Completion"),
                         (false, true) => (IconName::File, Color::Muted, "No Edits Produced"),
                         (false, false) => (IconName::FileDiff, Color::Accent, "Edits Available"),
                     };
 
-                let file = completion.buffer.read(cx).file();
-                let file_name = file
-                    .as_ref()
-                    .map_or(SharedString::new_static("untitled"), |file| {
-                        file.file_name(cx).to_string().into()
-                    });
-                let file_path = file.map(|file| file.path().as_unix_str().to_string());
+                let file_name = completion
+                    .path
+                    .file_name()
+                    .map(|f| f.to_string_lossy().into_owned())
+                    .unwrap_or("untitled".to_string());
+                let file_path = completion
+                    .path
+                    .parent()
+                    .map(|p| p.to_string_lossy().into_owned());
 
-                ListItem::new(completion.id.clone())
+                ListItem::new(completion.id)
                     .inset(true)
                     .spacing(ListItemSpacing::Sparse)
                     .focused(index == self.selected_index)
@@ -787,12 +615,12 @@ impl RatePredictionsModal {
     }
 }
 
-impl Render for RatePredictionsModal {
+impl Render for RateCompletionModal {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let border_color = cx.theme().colors().border;
 
         h_flex()
-            .key_context("RatePredictionModal")
+            .key_context("RateCompletionModal")
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::dismiss))
             .on_action(cx.listener(Self::confirm))
@@ -860,20 +688,20 @@ impl Render for RatePredictionsModal {
                             ),
                     ),
             )
-            .children(self.render_active_completion(window, cx))
+            .children(self.render_active_completion(cx))
             .on_mouse_down_out(cx.listener(|_, _, _, cx| cx.emit(DismissEvent)))
     }
 }
 
-impl EventEmitter<DismissEvent> for RatePredictionsModal {}
+impl EventEmitter<DismissEvent> for RateCompletionModal {}
 
-impl Focusable for RatePredictionsModal {
+impl Focusable for RateCompletionModal {
     fn focus_handle(&self, _cx: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
-impl ModalView for RatePredictionsModal {}
+impl ModalView for RateCompletionModal {}
 
 fn format_time_ago(elapsed: Duration) -> String {
     let seconds = elapsed.as_secs();

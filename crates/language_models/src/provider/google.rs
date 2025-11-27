@@ -1094,7 +1094,6 @@ mod tests {
                     role: Role::Assistant,
                     content: vec![MessageContent::ToolUse(tool_use)],
                     cache: false,
-                    reasoning_details: None,
                 }],
                 ..Default::default()
             },
@@ -1131,7 +1130,6 @@ mod tests {
                     role: Role::Assistant,
                     content: vec![MessageContent::ToolUse(tool_use)],
                     cache: false,
-                    reasoning_details: None,
                 }],
                 ..Default::default()
             },
@@ -1164,7 +1162,6 @@ mod tests {
                     role: Role::Assistant,
                     content: vec![MessageContent::ToolUse(tool_use)],
                     cache: false,
-                    reasoning_details: None,
                 }],
                 ..Default::default()
             },
@@ -1221,7 +1218,6 @@ mod tests {
                     role: Role::Assistant,
                     content: vec![MessageContent::ToolUse(tool_use)],
                     cache: false,
-                    reasoning_details: None,
                 }],
                 ..Default::default()
             },

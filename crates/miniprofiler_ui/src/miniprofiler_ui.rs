@@ -1,22 +1,21 @@
 use std::{
     ops::Range,
     path::PathBuf,
-    rc::Rc,
     time::{Duration, Instant},
 };
 
 use gpui::{
-    App, AppContext, ClipboardItem, Context, Div, Entity, Hsla, InteractiveElement,
-    ParentElement as _, Render, SerializedTaskTiming, SharedString, StatefulInteractiveElement,
-    Styled, Task, TaskTiming, TitlebarOptions, UniformListScrollHandle, WindowBounds, WindowHandle,
-    WindowOptions, div, prelude::FluentBuilder, px, relative, size, uniform_list,
+    App, AppContext, ClipboardItem, Context, Entity, Hsla, InteractiveElement, IntoElement,
+    ParentElement, Render, ScrollHandle, SerializedTaskTiming, SharedString,
+    StatefulInteractiveElement, Styled, Task, TaskTiming, TitlebarOptions, WindowBounds,
+    WindowHandle, WindowOptions, div, prelude::FluentBuilder, px, relative, size,
 };
 use util::ResultExt;
 use workspace::{
     Workspace,
     ui::{
-        ActiveTheme, Button, ButtonCommon, ButtonStyle, Checkbox, Clickable, Divider,
-        ScrollableHandle as _, ToggleState, Tooltip, WithScrollbar, h_flex, v_flex,
+        ActiveTheme, Button, ButtonCommon, ButtonStyle, Checkbox, Clickable, ToggleState, Tooltip,
+        WithScrollbar, h_flex, v_flex,
     },
 };
 use zed_actions::OpenPerformanceProfiler;
@@ -96,7 +95,7 @@ pub struct ProfilerWindow {
     data: DataMode,
     include_self_timings: ToggleState,
     autoscroll: bool,
-    scroll_handle: UniformListScrollHandle,
+    scroll_handle: ScrollHandle,
     workspace: Option<WindowHandle<Workspace>>,
     _refresh: Option<Task<()>>,
 }
@@ -112,7 +111,7 @@ impl ProfilerWindow {
             data: DataMode::Realtime(None),
             include_self_timings: ToggleState::Unselected,
             autoscroll: true,
-            scroll_handle: UniformListScrollHandle::default(),
+            scroll_handle: ScrollHandle::new(),
             workspace: workspace_handle,
             _refresh: Some(Self::begin_listen(cx)),
         });
@@ -129,7 +128,16 @@ impl ProfilerWindow {
                     .get_current_thread_timings();
 
                 this.update(cx, |this: &mut ProfilerWindow, cx| {
+                    let scroll_offset = this.scroll_handle.offset();
+                    let max_offset = this.scroll_handle.max_offset();
+                    this.autoscroll = -scroll_offset.y >= (max_offset.height - px(5.0));
+
                     this.data = DataMode::Realtime(Some(data));
+
+                    if this.autoscroll {
+                        this.scroll_handle.scroll_to_bottom();
+                    }
+
                     cx.notify();
                 })
                 .ok();
@@ -149,7 +157,12 @@ impl ProfilerWindow {
         }
     }
 
-    fn render_timing(value_range: Range<Instant>, item: TimingBar, cx: &App) -> Div {
+    fn render_timing(
+        &self,
+        value_range: Range<Instant>,
+        item: TimingBar,
+        cx: &App,
+    ) -> impl IntoElement {
         let time_ms = item.end.duration_since(item.start).as_secs_f32() * 1000f32;
 
         let remap = value_range
@@ -214,10 +227,10 @@ impl ProfilerWindow {
             )
             .child(
                 div()
-                    .min_w(px(70.))
+                    .min_w(px(60.0))
                     .flex_shrink_0()
                     .text_right()
-                    .child(format!("{:.1} ms", time_ms)),
+                    .child(format!("{:.1}ms", time_ms)),
             )
     }
 }
@@ -228,23 +241,15 @@ impl Render for ProfilerWindow {
         window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
-        let scroll_offset = self.scroll_handle.offset();
-        let max_offset = self.scroll_handle.max_offset();
-        self.autoscroll = -scroll_offset.y >= (max_offset.height - px(24.));
-        if self.autoscroll {
-            self.scroll_handle.scroll_to_bottom();
-        }
-
         v_flex()
             .id("profiler")
             .w_full()
             .h_full()
+            .gap_2()
             .bg(cx.theme().colors().surface_background)
             .text_color(cx.theme().colors().text)
             .child(
                 h_flex()
-                    .py_2()
-                    .px_4()
                     .w_full()
                     .justify_between()
                     .child(
@@ -341,70 +346,53 @@ impl Render for ProfilerWindow {
 
                 let min = e[0].start;
                 let max = e[e.len() - 1].end.unwrap_or_else(|| Instant::now());
-                let timings = Rc::new(
-                    e.into_iter()
-                        .filter(|timing| {
-                            timing
-                                .end
-                                .unwrap_or_else(|| Instant::now())
-                                .duration_since(timing.start)
-                                .as_millis()
-                                >= 1
-                        })
-                        .filter(|timing| {
-                            if self.include_self_timings.selected() {
-                                true
-                            } else {
-                                !timing.location.file().ends_with("miniprofiler_ui.rs")
-                            }
-                        })
-                        .cloned()
-                        .collect::<Vec<_>>(),
-                );
-
-                div.child(Divider::horizontal()).child(
+                div.child(
                     v_flex()
                         .id("timings.bars")
+                        .overflow_scroll()
                         .w_full()
                         .h_full()
                         .gap_2()
-                        .child(
-                            uniform_list("list", timings.len(), {
-                                let timings = timings.clone();
-                                move |visible_range, _, cx| {
-                                    let mut items = vec![];
-                                    for i in visible_range {
-                                        let timing = &timings[i];
-                                        let value_range =
-                                            max.checked_sub(Duration::from_secs(10)).unwrap_or(min)
-                                                ..max;
-                                        items.push(Self::render_timing(
-                                            value_range,
-                                            TimingBar {
-                                                location: timing.location,
-                                                start: timing.start,
-                                                end: timing.end.unwrap_or_else(|| Instant::now()),
-                                                color: cx
-                                                    .theme()
-                                                    .accents()
-                                                    .color_for_index(i as u32),
-                                            },
-                                            cx,
-                                        ));
+                        .track_scroll(&self.scroll_handle)
+                        .on_scroll_wheel(cx.listener(|this, _, _, _cx| {
+                            let scroll_offset = this.scroll_handle.offset();
+                            let max_offset = this.scroll_handle.max_offset();
+                            this.autoscroll = -scroll_offset.y >= (max_offset.height - px(5.0));
+                        }))
+                        .children(
+                            e.iter()
+                                .filter(|timing| {
+                                    timing
+                                        .end
+                                        .unwrap_or_else(|| Instant::now())
+                                        .duration_since(timing.start)
+                                        .as_millis()
+                                        >= 1
+                                })
+                                .filter(|timing| {
+                                    if self.include_self_timings.selected() {
+                                        true
+                                    } else {
+                                        !timing.location.file().ends_with("miniprofiler_ui.rs")
                                     }
-                                    items
-                                }
-                            })
-                            .p_4()
-                            .on_scroll_wheel(cx.listener(|this, _, _, cx| {
-                                this.autoscroll = false;
-                                cx.notify();
-                            }))
-                            .track_scroll(&self.scroll_handle)
-                            .size_full(),
-                        )
-                        .vertical_scrollbar_for(&self.scroll_handle, window, cx),
+                                })
+                                .enumerate()
+                                .map(|(i, timing)| {
+                                    self.render_timing(
+                                        max.checked_sub(Duration::from_secs(10)).unwrap_or(min)
+                                            ..max,
+                                        TimingBar {
+                                            location: timing.location,
+                                            start: timing.start,
+                                            end: timing.end.unwrap_or_else(|| Instant::now()),
+                                            color: cx.theme().accents().color_for_index(i as u32),
+                                        },
+                                        cx,
+                                    )
+                                }),
+                        ),
                 )
+                .vertical_scrollbar_for(self.scroll_handle.clone(), window, cx)
             })
     }
 }

@@ -889,7 +889,7 @@ impl Element for MarkdownElement {
                                     {
                                         let scrollbars = Scrollbars::new(ScrollAxes::Horizontal)
                                             .id(("markdown-code-block-scrollbar", range.start))
-                                            .tracked_scroll_handle(scroll_handle)
+                                            .tracked_scroll_handle(scroll_handle.clone())
                                             .with_track_along(
                                                 ScrollAxes::Horizontal,
                                                 cx.theme().colors().editor_background,
