@@ -1206,7 +1206,6 @@ impl AcpThreadView {
             let status = if res.is_ok() {
                 this.update(cx, |this, _| {
                     this.in_flight_prompt.take();
-                    // Store final elapsed time and stop the timer
                     if let Some(started_at) = this.generation_started_at.take() {
                         this.generation_final_elapsed = Some(started_at.elapsed());
                     }
