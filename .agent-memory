@@ -1,0 +1,14 @@
+## Recently Asked
+
+
+### 2025-11-27
+Q: where's the code for the "Follow the Zed Agent" functionality?
+A: `render_follow_toggle()` function (main implementation)
+
+### 2025-11-27
+Q: where's code to change chat title?
+A: The main code for changing chat titles is in:
+1. crates/agent_ui/src/acp/thread_view.rs:921-940 - Handles title editor events and updates the thread title when the editor buffer is edited
+2. crates/agent/src/thread.rs:1796-1803 - The set_title method that actually updates the thread's title
+3. crates/acp_thread/src/acp_thread.rs:1253-1258 - ACP thread's set_title method that handles the connection to set titles
+The key flow is: user edits title → handle_title_editor_event → thread.set_title() → title gets updated and emitted via TitleUpdated event.
