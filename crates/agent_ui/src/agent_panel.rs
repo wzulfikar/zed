@@ -28,10 +28,9 @@ use crate::ManageProfiles;
 use crate::agent_panel_tab::{AgentPanelTab, AgentPanelTabIdentity, TabId, TabLabelRender};
 use crate::ui::{AcpOnboardingModal, ClaudeCodeOnboardingModal};
 use crate::{
-    AddContextServer, AgentDiffPane, CloseActiveThreadTab, DeleteRecentlyOpenThread, Follow,
-    InlineAssistant, NewTextThread, NewThread, OpenActiveThreadAsMarkdown, OpenAgentDiff,
-    OpenHistory, ResetTrialEndUpsell, ResetTrialUpsell, ToggleNavigationMenu, ToggleNewThreadMenu,
-    ToggleOptionsMenu,
+    AddContextServer, AgentDiffPane, CloseActiveThreadTab, Follow, InlineAssistant, NewTextThread,
+    NewThread, OpenActiveThreadAsMarkdown, OpenAgentDiff, OpenHistory, ResetTrialEndUpsell,
+    ResetTrialUpsell, ToggleNavigationMenu, ToggleNewThreadMenu, ToggleOptionsMenu,
     acp::AcpThreadView,
     agent_configuration::{AgentConfiguration, AssistantConfigurationEvent},
     slash_command::SlashCommandCompletionProvider,
@@ -642,11 +641,14 @@ impl AgentPanel {
                     if let Some(panel) = panel.upgrade() {
                         menu = Self::populate_recently_opened_menu_section(menu, panel, cx);
                     }
-                    menu.action("View All", Box::new(OpenHistory))
-                        .end_slot_action(DeleteRecentlyOpenThread.boxed_clone())
+
+                    menu = menu
+                        .action("View All", Box::new(OpenHistory))
                         .fixed_width(px(320.).into())
                         .keep_open_on_confirm(false)
-                        .key_context("NavigationMenu")
+                        .key_context("NavigationMenu");
+
+                    menu
                 });
             weak_panel
                 .update(cx, |panel, cx| {
@@ -2805,7 +2807,7 @@ impl AgentPanel {
             .into_any_element()
     }
 
-    // Note: not used in Zed fork because we're using agent tabs
+    // NOTE: not used in Zed fork because we're using agent tabs
     fn render_toolbar(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let agent_server_store = self.project.read(cx).agent_server_store().clone();
         let focus_handle = self.focus_handle(cx);
@@ -3484,7 +3486,7 @@ impl AgentPanel {
             .child(self.render_panel_options_menu(window, cx));
 
         let mut tab_bar = TabBar::new("agent-tab-bar")
-            .track_scroll(self.tab_bar_scroll_handle.clone())
+            .track_scroll(&self.tab_bar_scroll_handle.clone())
             .end_child(end_slot);
 
         if let Some(overlay_view) = &self.overlay_view {
