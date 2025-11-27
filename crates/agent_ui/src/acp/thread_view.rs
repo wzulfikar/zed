@@ -1204,6 +1204,7 @@ impl AcpThreadView {
             let res = send.await;
             let turn_time_ms = turn_start_time.elapsed().as_millis();
             let status = if res.is_ok() {
+                // Store final elapsed time and stop the timer
                 this.update(cx, |this, _| {
                     this.in_flight_prompt.take();
                     if let Some(started_at) = this.generation_started_at.take() {
