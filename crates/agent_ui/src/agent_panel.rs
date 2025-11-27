@@ -3476,7 +3476,7 @@ impl AgentPanel {
             .child(self.render_panel_options_menu(window, cx));
 
         let mut tab_bar = TabBar::new("agent-tab-bar")
-            .track_scroll(&self.tab_bar_scroll_handle.clone())
+            .track_scroll(&self.tab_bar_scroll_handle)
             .end_child(end_slot);
 
         if let Some(overlay_view) = &self.overlay_view {

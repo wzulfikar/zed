@@ -4549,7 +4549,7 @@ impl AcpThreadView {
     }
 
     fn format_elapsed_time(&self, elapsed: Duration) -> String {
-        let seconds = elapsed.as_millis() / 1000;
+        let seconds = elapsed.as_secs();
         if seconds < 60 {
             format!(" {}s", seconds)
         } else {
