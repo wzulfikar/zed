@@ -5,14 +5,13 @@ use gpui::{
     App, Context, Corner, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, ParentElement,
     Render, Styled, Subscription, Task, WeakEntity, Window, actions, div,
 };
-use itertools::Itertools as _;
 use language::{LanguageServerId, language_settings::SoftWrap};
 use lsp::{
-    LanguageServer, LanguageServerName, LanguageServerSelector, MessageType, SetTraceParams,
-    TraceValue, notification::SetTrace,
+    LanguageServer, LanguageServerBinary, LanguageServerName, LanguageServerSelector, MessageType,
+    SetTraceParams, TraceValue, notification::SetTrace,
 };
 use project::{
-    LanguageServerStatus, Project,
+    Project,
     lsp_store::log_store::{self, Event, LanguageServerKind, LogKind, LogStore, Message},
     search::SearchQuery,
 };
@@ -338,24 +337,16 @@ impl LspLogView {
 * Capabilities: {CAPABILITIES}
 
 * Configuration: {CONFIGURATION}",
-            NAME = info.status.name,
+            NAME = info.name,
             ID = info.id,
             BINARY = info
-                .status
                 .binary
                 .as_ref()
-                .map_or_else(|| "Unknown".to_string(), |binary| format!("{:#?}", binary)),
-            WORKSPACE_FOLDERS = info
-                .status
-                .workspace_folders
-                .iter()
-                .filter_map(|uri| uri.to_file_path().ok())
-                .map(|path| path.to_string_lossy().into_owned())
-                .join(", "),
+                .map_or_else(|| "Unknown".to_string(), |binary| format!("{binary:#?}")),
+            WORKSPACE_FOLDERS = info.workspace_folders.join(", "),
             CAPABILITIES = serde_json::to_string_pretty(&info.capabilities)
                 .unwrap_or_else(|e| format!("Failed to serialize capabilities: {e}")),
             CONFIGURATION = info
-                .status
                 .configuration
                 .map(|configuration| serde_json::to_string_pretty(&configuration))
                 .transpose()
@@ -642,12 +633,17 @@ impl LspLogView {
                     .or_else(move || {
                         let capabilities =
                             lsp_store.lsp_server_capabilities.get(&server_id)?.clone();
-                        let status = lsp_store.language_server_statuses.get(&server_id)?.clone();
-
+                        let name = lsp_store
+                            .language_server_statuses
+                            .get(&server_id)
+                            .map(|status| status.name.clone())?;
                         Some(ServerInfo {
                             id: server_id,
                             capabilities,
-                            status,
+                            binary: None,
+                            name,
+                            workspace_folders: Vec::new(),
+                            configuration: None,
                         })
                     })
             })
@@ -962,7 +958,7 @@ impl Render for LspLogToolbarItemView {
                         for (server_id, name, worktree_root, active_entry_kind) in
                             available_language_servers.iter()
                         {
-                            let label = format!("{name} ({worktree_root})");
+                            let label = format!("{} ({})", name, worktree_root);
                             let server_id = *server_id;
                             let active_entry_kind = *active_entry_kind;
                             menu = menu.entry(
@@ -1318,7 +1314,10 @@ impl LspLogToolbarItemView {
 struct ServerInfo {
     id: LanguageServerId,
     capabilities: lsp::ServerCapabilities,
-    status: LanguageServerStatus,
+    binary: Option<LanguageServerBinary>,
+    name: LanguageServerName,
+    workspace_folders: Vec<String>,
+    configuration: Option<serde_json::Value>,
 }
 
 impl ServerInfo {
@@ -1326,16 +1325,18 @@ impl ServerInfo {
         Self {
             id: server.server_id(),
             capabilities: server.capabilities(),
-            status: LanguageServerStatus {
-                name: server.name(),
-                pending_work: Default::default(),
-                has_pending_diagnostic_updates: false,
-                progress_tokens: Default::default(),
-                worktree: None,
-                binary: Some(server.binary().clone()),
-                configuration: Some(server.configuration().clone()),
-                workspace_folders: server.workspace_folders(),
-            },
+            binary: Some(server.binary().clone()),
+            name: server.name(),
+            workspace_folders: server
+                .workspace_folders()
+                .into_iter()
+                .filter_map(|path| {
+                    path.to_file_path()
+                        .ok()
+                        .map(|path| path.to_string_lossy().into_owned())
+                })
+                .collect::<Vec<_>>(),
+            configuration: Some(server.configuration().clone()),
         }
     }
 }

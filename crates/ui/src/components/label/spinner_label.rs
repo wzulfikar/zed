@@ -77,7 +77,7 @@ impl SpinnerLabel {
         let duration = variant.duration();
 
         SpinnerLabel {
-            base: Label::new(frames[0]).color(Color::Muted),
+            base: Label::new(frames[0]),
             variant,
             frames,
             duration,
@@ -164,7 +164,7 @@ impl RenderOnce for SpinnerLabel {
         let frames = self.frames.clone();
         let duration = self.duration;
 
-        self.base.with_animation(
+        self.base.color(Color::Muted).with_animation(
             self.variant.animation_id(),
             Animation::new(duration).repeat(),
             move |mut label, delta| {

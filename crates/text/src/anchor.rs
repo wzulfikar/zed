@@ -6,7 +6,7 @@ use std::{cmp::Ordering, fmt::Debug, ops::Range};
 use sum_tree::{Bias, Dimensions};
 
 /// A timestamped position in a buffer
-#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct Anchor {
     pub timestamp: clock::Lamport,
     /// The byte offset in the buffer
@@ -14,24 +14,6 @@ pub struct Anchor {
     /// Describes which character the anchor is biased towards
     pub bias: Bias,
     pub buffer_id: Option<BufferId>,
-}
-
-impl Debug for Anchor {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.is_min() {
-            return write!(f, "Anchor::min({:?})", self.buffer_id);
-        }
-        if self.is_max() {
-            return write!(f, "Anchor::max({:?})", self.buffer_id);
-        }
-
-        f.debug_struct("Anchor")
-            .field("timestamp", &self.timestamp)
-            .field("offset", &self.offset)
-            .field("bias", &self.bias)
-            .field("buffer_id", &self.buffer_id)
-            .finish()
-    }
 }
 
 impl Anchor {
@@ -48,36 +30,6 @@ impl Anchor {
         bias: Bias::Right,
         buffer_id: None,
     };
-
-    pub fn min_for_buffer(buffer_id: BufferId) -> Self {
-        Self {
-            timestamp: clock::Lamport::MIN,
-            offset: usize::MIN,
-            bias: Bias::Left,
-            buffer_id: Some(buffer_id),
-        }
-    }
-
-    pub fn max_for_buffer(buffer_id: BufferId) -> Self {
-        Self {
-            timestamp: clock::Lamport::MAX,
-            offset: usize::MAX,
-            bias: Bias::Right,
-            buffer_id: Some(buffer_id),
-        }
-    }
-
-    pub fn min_min_range_for_buffer(buffer_id: BufferId) -> std::ops::Range<Self> {
-        let min = Self::min_for_buffer(buffer_id);
-        min..min
-    }
-    pub fn max_max_range_for_buffer(buffer_id: BufferId) -> std::ops::Range<Self> {
-        let max = Self::max_for_buffer(buffer_id);
-        max..max
-    }
-    pub fn min_max_range_for_buffer(buffer_id: BufferId) -> std::ops::Range<Self> {
-        Self::min_for_buffer(buffer_id)..Self::max_for_buffer(buffer_id)
-    }
 
     pub fn cmp(&self, other: &Anchor, buffer: &BufferSnapshot) -> Ordering {
         let fragment_id_comparison = if self.timestamp == other.timestamp {
@@ -139,7 +91,7 @@ impl Anchor {
 
     /// Returns true when the [`Anchor`] is located inside a visible fragment.
     pub fn is_valid(&self, buffer: &BufferSnapshot) -> bool {
-        if self.is_min() || self.is_max() {
+        if *self == Anchor::MIN || *self == Anchor::MAX {
             true
         } else if self.buffer_id.is_none_or(|id| id != buffer.remote_id) {
             false
@@ -156,18 +108,6 @@ impl Anchor {
                 );
             item.is_some_and(|fragment| fragment.visible)
         }
-    }
-
-    pub fn is_min(&self) -> bool {
-        self.timestamp == clock::Lamport::MIN
-            && self.offset == usize::MIN
-            && self.bias == Bias::Left
-    }
-
-    pub fn is_max(&self) -> bool {
-        self.timestamp == clock::Lamport::MAX
-            && self.offset == usize::MAX
-            && self.bias == Bias::Right
     }
 }
 

@@ -1089,7 +1089,6 @@ async fn download_latest_version(
         RenameOptions {
             ignore_if_exists: true,
             overwrite: true,
-            create_parents: false,
         },
     )
     .await?;

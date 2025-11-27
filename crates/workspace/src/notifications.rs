@@ -593,9 +593,9 @@ pub mod simple_message_notification {
 
     use gpui::{
         AnyElement, DismissEvent, EventEmitter, FocusHandle, Focusable, ParentElement, Render,
-        ScrollHandle, SharedString, Styled,
+        SharedString, Styled,
     };
-    use ui::{WithScrollbar, prelude::*};
+    use ui::prelude::*;
 
     use crate::notifications::NotificationFrame;
 
@@ -617,7 +617,6 @@ pub mod simple_message_notification {
         show_close_button: bool,
         show_suppress_button: bool,
         title: Option<SharedString>,
-        scroll_handle: ScrollHandle,
     }
 
     impl Focusable for MessageNotification {
@@ -662,7 +661,6 @@ pub mod simple_message_notification {
                 show_suppress_button: true,
                 title: None,
                 focus_handle: cx.focus_handle(),
-                scroll_handle: ScrollHandle::new(),
             }
         }
 
@@ -779,18 +777,7 @@ pub mod simple_message_notification {
         fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
             NotificationFrame::new()
                 .with_title(self.title.clone())
-                .with_content(
-                    div()
-                        .child(
-                            div()
-                                .id("message-notification-content")
-                                .max_h(vh(0.6, window))
-                                .overflow_y_scroll()
-                                .track_scroll(&self.scroll_handle.clone())
-                                .child((self.build_content)(window, cx)),
-                        )
-                        .vertical_scrollbar_for(&self.scroll_handle, window, cx),
-                )
+                .with_content((self.build_content)(window, cx))
                 .show_close_button(self.show_close_button)
                 .show_suppress_button(self.show_suppress_button)
                 .on_close(cx.listener(|_, suppress, _, cx| {

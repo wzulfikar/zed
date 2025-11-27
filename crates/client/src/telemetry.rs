@@ -158,7 +158,7 @@ pub fn os_version() -> String {
         let mut info = unsafe { std::mem::zeroed() };
         let status = unsafe { windows::Wdk::System::SystemServices::RtlGetVersion(&mut info) };
         if status.is_ok() {
-            semver::Version::new(
+            gpui::SemanticVersion::new(
                 info.dwMajorVersion as _,
                 info.dwMinorVersion as _,
                 info.dwBuildNumber as _,

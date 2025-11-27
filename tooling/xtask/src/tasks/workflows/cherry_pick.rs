@@ -3,14 +3,14 @@ use gh_workflow::*;
 use crate::tasks::workflows::{
     runners,
     steps::{self, NamedJob, named},
-    vars::{self, StepOutput, WorkflowInput},
+    vars::{self, Input, StepOutput},
 };
 
 pub fn cherry_pick() -> Workflow {
-    let branch = WorkflowInput::string("branch", None);
-    let commit = WorkflowInput::string("commit", None);
-    let channel = WorkflowInput::string("channel", None);
-    let pr_number = WorkflowInput::string("pr_number", None);
+    let branch = Input::string("branch", None);
+    let commit = Input::string("commit", None);
+    let channel = Input::string("channel", None);
+    let pr_number = Input::string("pr_number", None);
     let cherry_pick = run_cherry_pick(&branch, &commit, &channel);
     named::workflow()
         .run_name(format!("cherry_pick to {channel} #{pr_number}"))
@@ -24,11 +24,7 @@ pub fn cherry_pick() -> Workflow {
         .add_job(cherry_pick.name, cherry_pick.job)
 }
 
-fn run_cherry_pick(
-    branch: &WorkflowInput,
-    commit: &WorkflowInput,
-    channel: &WorkflowInput,
-) -> NamedJob {
+fn run_cherry_pick(branch: &Input, commit: &Input, channel: &Input) -> NamedJob {
     fn authenticate_as_zippy() -> (Step<Use>, StepOutput) {
         let step = named::uses(
             "actions",
@@ -43,9 +39,9 @@ fn run_cherry_pick(
     }
 
     fn cherry_pick(
-        branch: &WorkflowInput,
-        commit: &WorkflowInput,
-        channel: &WorkflowInput,
+        branch: &Input,
+        commit: &Input,
+        channel: &Input,
         token: &StepOutput,
     ) -> Step<Run> {
         named::bash(&format!("./script/cherry-pick {branch} {commit} {channel}"))

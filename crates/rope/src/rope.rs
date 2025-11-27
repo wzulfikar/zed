@@ -58,7 +58,7 @@ impl Rope {
         match item {
             Some(chunk) => {
                 let chunk_offset = offset - start;
-                chunk.assert_char_boundary::<true>(chunk_offset);
+                chunk.assert_char_boundary(chunk_offset);
             }
             None => {
                 panic!(
@@ -715,8 +715,10 @@ impl<'a> Chunks<'a> {
             range.start
         };
         let chunk_offset = offset - chunks.start();
-        if let Some(chunk) = chunks.item() {
-            chunk.assert_char_boundary::<true>(chunk_offset);
+        if let Some(chunk) = chunks.item()
+            && !chunk.text.is_char_boundary(chunk_offset)
+        {
+            panic!("byte index {} is not a char boundary", offset);
         }
         Self {
             chunks,

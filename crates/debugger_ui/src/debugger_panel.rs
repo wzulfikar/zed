@@ -651,17 +651,6 @@ impl DebugPanel {
                 .tooltip(Tooltip::text("Open Debug Adapter Logs"))
         };
 
-        let close_bottom_panel_button = {
-            h_flex().pl_0p5().gap_1().child(Divider::vertical()).child(
-                IconButton::new("debug-close-panel", IconName::Close)
-                    .icon_size(IconSize::Small)
-                    .on_click(move |_, window, cx| {
-                        window.dispatch_action(workspace::ToggleBottomDock.boxed_clone(), cx)
-                    })
-                    .tooltip(Tooltip::text("Close Panel")),
-            )
-        };
-
         Some(
             div.w_full()
                 .py_1()
@@ -669,7 +658,7 @@ impl DebugPanel {
                 .justify_between()
                 .border_b_1()
                 .border_color(cx.theme().colors().border)
-                .when(is_side, |this| this.gap_1().h(Tab::container_height(cx)))
+                .when(is_side, |this| this.gap_1())
                 .child(
                     h_flex()
                         .justify_between()
@@ -968,7 +957,6 @@ impl DebugPanel {
                                         .child(edit_debug_json_button())
                                         .child(documentation_button())
                                         .child(logs_button())
-                                        .child(close_bottom_panel_button)
                                 }),
                         ),
                 ),

@@ -954,12 +954,7 @@ impl Vim {
     }
 
     fn deactivate(editor: &mut Editor, cx: &mut Context<Editor>) {
-        editor.set_cursor_shape(
-            EditorSettings::get_global(cx)
-                .cursor_shape
-                .unwrap_or_default(),
-            cx,
-        );
+        editor.set_cursor_shape(CursorShape::Bar, cx);
         editor.set_clip_at_line_ends(false, cx);
         editor.set_collapse_matches(false);
         editor.set_input_enabled(true);
@@ -1263,7 +1258,7 @@ impl Vim {
         };
 
         if global_state.dot_recording {
-            global_state.recording_count = count;
+            global_state.recorded_count = count;
         }
         count
     }
@@ -1521,7 +1516,7 @@ impl Vim {
             if !globals.dot_replaying {
                 globals.dot_recording = true;
                 globals.recording_actions = Default::default();
-                globals.recording_count = None;
+                globals.recorded_count = None;
 
                 let selections = self.editor().map(|editor| {
                     editor.update(cx, |editor, cx| {
@@ -1591,7 +1586,6 @@ impl Vim {
                 .recording_actions
                 .push(ReplayableAction::Action(action.boxed_clone()));
             globals.recorded_actions = mem::take(&mut globals.recording_actions);
-            globals.recorded_count = globals.recording_count.take();
             globals.dot_recording = false;
             globals.stop_recording_after_next_action = false;
         }

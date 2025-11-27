@@ -22,7 +22,7 @@ use sea_orm::{
     entity::prelude::*,
     sea_query::{Alias, Expr, OnConflict},
 };
-use semver::Version;
+use semantic_version::SemanticVersion;
 use serde::{Deserialize, Serialize};
 use std::ops::RangeInclusive;
 use std::{
@@ -671,7 +671,7 @@ pub struct NewExtensionVersion {
 
 pub struct ExtensionVersionConstraints {
     pub schema_versions: RangeInclusive<i32>,
-    pub wasm_api_versions: RangeInclusive<semver::Version>,
+    pub wasm_api_versions: RangeInclusive<SemanticVersion>,
 }
 
 impl LocalSettingsKind {

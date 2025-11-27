@@ -569,7 +569,7 @@ impl VsCodeSettings {
             .filter_map(|(k, v)| {
                 Some((
                     k.clone().into(),
-                    ContextServerSettingsContent::Stdio {
+                    ContextServerSettingsContent::Custom {
                         enabled: true,
                         command: serde_json::from_value::<VsCodeContextServerCommand>(v.clone())
                             .ok()

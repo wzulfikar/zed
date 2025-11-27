@@ -3,13 +3,13 @@ use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Write as _},
     ops::{Add, Range, Sub},
-    path::Path,
+    path::{Path, PathBuf},
     sync::Arc,
 };
 use strum::EnumIter;
 use uuid::Uuid;
 
-use crate::{PredictEditsGitInfo, PredictEditsRequestTrigger};
+use crate::PredictEditsGitInfo;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanContextRetrievalRequest {
@@ -17,7 +17,7 @@ pub struct PlanContextRetrievalRequest {
     pub excerpt_path: Arc<Path>,
     pub excerpt_line_range: Range<Line>,
     pub cursor_file_max_row: Line,
-    pub events: Vec<Arc<Event>>,
+    pub events: Vec<Event>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,7 +36,7 @@ pub struct PredictEditsRequest {
     pub signatures: Vec<Signature>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub referenced_declarations: Vec<ReferencedDeclaration>,
-    pub events: Vec<Arc<Event>>,
+    pub events: Vec<Event>,
     #[serde(default)]
     pub can_collect_data: bool,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -53,8 +53,6 @@ pub struct PredictEditsRequest {
     pub prompt_max_bytes: Option<usize>,
     #[serde(default)]
     pub prompt_format: PromptFormat,
-    #[serde(default)]
-    pub trigger: PredictEditsRequestTrigger,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,8 +80,6 @@ pub enum PromptFormat {
     Minimal,
     /// One-sentence instructions + FIM-like template
     MinimalQwen,
-    /// No instructions, Qwen chat + Seed-Coder 1120 FIM-like template
-    SeedCoder1120,
 }
 
 impl PromptFormat {
@@ -112,7 +108,6 @@ impl std::fmt::Display for PromptFormat {
             PromptFormat::OldTextNewText => write!(f, "Old Text / New Text"),
             PromptFormat::Minimal => write!(f, "Minimal"),
             PromptFormat::MinimalQwen => write!(f, "Minimal + Qwen FIM"),
-            PromptFormat::SeedCoder1120 => write!(f, "Seed-Coder 1120"),
         }
     }
 }
@@ -122,11 +117,10 @@ impl std::fmt::Display for PromptFormat {
 #[serde(tag = "event")]
 pub enum Event {
     BufferChange {
-        path: Arc<Path>,
-        old_path: Arc<Path>,
+        path: Option<PathBuf>,
+        old_path: Option<PathBuf>,
         diff: String,
         predicted: bool,
-        in_open_source_repo: bool,
     },
 }
 
@@ -138,21 +132,23 @@ impl Display for Event {
                 old_path,
                 diff,
                 predicted,
-                ..
             } => {
+                let new_path = path.as_deref().unwrap_or(Path::new("untitled"));
+                let old_path = old_path.as_deref().unwrap_or(new_path);
+
                 if *predicted {
                     write!(
                         f,
                         "// User accepted prediction:\n--- a/{}\n+++ b/{}\n{diff}",
                         DiffPathFmt(old_path),
-                        DiffPathFmt(path)
+                        DiffPathFmt(new_path)
                     )
                 } else {
                     write!(
                         f,
                         "--- a/{}\n+++ b/{}\n{diff}",
                         DiffPathFmt(old_path),
-                        DiffPathFmt(path)
+                        DiffPathFmt(new_path)
                     )
                 }
             }
@@ -301,11 +297,10 @@ mod tests {
     #[test]
     fn test_event_display() {
         let ev = Event::BufferChange {
-            path: Path::new("untitled").into(),
-            old_path: Path::new("untitled").into(),
+            path: None,
+            old_path: None,
             diff: "@@ -1,2 +1,2 @@\n-a\n-b\n".into(),
             predicted: false,
-            in_open_source_repo: true,
         };
         assert_eq!(
             ev.to_string(),
@@ -319,11 +314,10 @@ mod tests {
         );
 
         let ev = Event::BufferChange {
-            path: Path::new("foo/bar.txt").into(),
-            old_path: Path::new("foo/bar.txt").into(),
+            path: Some(PathBuf::from("foo/bar.txt")),
+            old_path: Some(PathBuf::from("foo/bar.txt")),
             diff: "@@ -1,2 +1,2 @@\n-a\n-b\n".into(),
             predicted: false,
-            in_open_source_repo: true,
         };
         assert_eq!(
             ev.to_string(),
@@ -337,11 +331,10 @@ mod tests {
         );
 
         let ev = Event::BufferChange {
-            path: Path::new("abc.txt").into(),
-            old_path: Path::new("123.txt").into(),
+            path: Some(PathBuf::from("abc.txt")),
+            old_path: Some(PathBuf::from("123.txt")),
             diff: "@@ -1,2 +1,2 @@\n-a\n-b\n".into(),
             predicted: false,
-            in_open_source_repo: true,
         };
         assert_eq!(
             ev.to_string(),
@@ -355,11 +348,10 @@ mod tests {
         );
 
         let ev = Event::BufferChange {
-            path: Path::new("abc.txt").into(),
-            old_path: Path::new("123.txt").into(),
+            path: Some(PathBuf::from("abc.txt")),
+            old_path: Some(PathBuf::from("123.txt")),
             diff: "@@ -1,2 +1,2 @@\n-a\n-b\n".into(),
             predicted: true,
-            in_open_source_repo: true,
         };
         assert_eq!(
             ev.to_string(),

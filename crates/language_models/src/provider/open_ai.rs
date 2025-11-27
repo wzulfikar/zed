@@ -277,7 +277,6 @@ impl LanguageModel for OpenAiLanguageModel {
             | Model::Five
             | Model::FiveMini
             | Model::FiveNano
-            | Model::FivePointOne
             | Model::O1
             | Model::O3
             | Model::O4Mini => true,
@@ -645,6 +644,7 @@ pub fn count_open_ai_tokens(
 ) -> BoxFuture<'static, Result<u64>> {
     cx.background_spawn(async move {
         let messages = collect_tiktoken_messages(request);
+
         match model {
             Model::Custom { max_tokens, .. } => {
                 let model = if max_tokens >= 100_000 {
@@ -672,11 +672,11 @@ pub fn count_open_ai_tokens(
             | Model::O1
             | Model::O3
             | Model::O3Mini
-            | Model::O4Mini
-            | Model::Five
-            | Model::FiveMini
-            | Model::FiveNano => tiktoken_rs::num_tokens_from_messages(model.id(), &messages), // GPT-5.1 doesn't have tiktoken support yet; fall back on gpt-4o tokenizer
-            Model::FivePointOne => tiktoken_rs::num_tokens_from_messages("gpt-5", &messages),
+            | Model::O4Mini => tiktoken_rs::num_tokens_from_messages(model.id(), &messages),
+            // GPT-5 models don't have tiktoken support yet; fall back on gpt-4o tokenizer
+            Model::Five | Model::FiveMini | Model::FiveNano => {
+                tiktoken_rs::num_tokens_from_messages("gpt-4o", &messages)
+            }
         }
         .map(|tokens| tokens as u64)
     })
@@ -882,7 +882,6 @@ mod tests {
                 role: Role::User,
                 content: vec![MessageContent::Text("message".into())],
                 cache: false,
-                reasoning_details: None,
             }],
             tools: vec![],
             tool_choice: None,

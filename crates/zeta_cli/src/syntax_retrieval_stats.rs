@@ -32,7 +32,7 @@ use std::{
     time::Duration,
 };
 use util::paths::PathStyle;
-use zeta::ContextMode;
+use zeta2::ContextMode;
 
 use crate::headless::ZetaCliAppState;
 use crate::source_location::SourceLocation;
@@ -44,7 +44,7 @@ pub async fn retrieval_stats(
     only_extension: Option<String>,
     file_limit: Option<usize>,
     skip_files: Option<usize>,
-    options: zeta::ZetaOptions,
+    options: zeta2::ZetaOptions,
     cx: &mut AsyncApp,
 ) -> Result<String> {
     let ContextMode::Syntax(context_options) = options.context.clone() else {

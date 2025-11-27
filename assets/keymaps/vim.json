@@ -414,9 +414,8 @@
     }
   },
   {
-    "context": "VimControl && vim_mode == helix_normal && !menu",
+    "context": "vim_mode == helix_normal && !menu",
     "bindings": {
-      "escape": "vim::SwitchToHelixNormalMode",
       "i": "vim::HelixInsert",
       "a": "vim::HelixAppend",
       "ctrl-[": "editor::Cancel"

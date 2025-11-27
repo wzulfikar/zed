@@ -123,7 +123,7 @@ pub fn benches() {
         cx.set_global(store);
         assets::Assets.load_test_fonts(cx);
         theme::init(theme::LoadThemes::JustBase, cx);
-        // release_channel::init(semver::Version::new(0,0,0), cx);
+        // release_channel::init(SemanticVersion::default(), cx);
         editor::init(cx);
     });
 

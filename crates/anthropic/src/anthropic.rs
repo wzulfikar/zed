@@ -67,13 +67,6 @@ pub enum Model {
         alias = "claude-opus-4-1-thinking-latest"
     )]
     ClaudeOpus4_1Thinking,
-    #[serde(rename = "claude-opus-4-5", alias = "claude-opus-4-5-latest")]
-    ClaudeOpus4_5,
-    #[serde(
-        rename = "claude-opus-4-5-thinking",
-        alias = "claude-opus-4-5-thinking-latest"
-    )]
-    ClaudeOpus4_5Thinking,
     #[serde(rename = "claude-sonnet-4", alias = "claude-sonnet-4-latest")]
     ClaudeSonnet4,
     #[serde(
@@ -138,14 +131,6 @@ impl Model {
     }
 
     pub fn from_id(id: &str) -> Result<Self> {
-        if id.starts_with("claude-opus-4-5-thinking") {
-            return Ok(Self::ClaudeOpus4_5Thinking);
-        }
-
-        if id.starts_with("claude-opus-4-5") {
-            return Ok(Self::ClaudeOpus4_5);
-        }
-
         if id.starts_with("claude-opus-4-1-thinking") {
             return Ok(Self::ClaudeOpus4_1Thinking);
         }
@@ -223,8 +208,6 @@ impl Model {
             Self::ClaudeOpus4_1 => "claude-opus-4-1-latest",
             Self::ClaudeOpus4Thinking => "claude-opus-4-thinking-latest",
             Self::ClaudeOpus4_1Thinking => "claude-opus-4-1-thinking-latest",
-            Self::ClaudeOpus4_5 => "claude-opus-4-5-latest",
-            Self::ClaudeOpus4_5Thinking => "claude-opus-4-5-thinking-latest",
             Self::ClaudeSonnet4 => "claude-sonnet-4-latest",
             Self::ClaudeSonnet4Thinking => "claude-sonnet-4-thinking-latest",
             Self::ClaudeSonnet4_5 => "claude-sonnet-4-5-latest",
@@ -247,7 +230,6 @@ impl Model {
         match self {
             Self::ClaudeOpus4 | Self::ClaudeOpus4Thinking => "claude-opus-4-20250514",
             Self::ClaudeOpus4_1 | Self::ClaudeOpus4_1Thinking => "claude-opus-4-1-20250805",
-            Self::ClaudeOpus4_5 | Self::ClaudeOpus4_5Thinking => "claude-opus-4-5-20251101",
             Self::ClaudeSonnet4 | Self::ClaudeSonnet4Thinking => "claude-sonnet-4-20250514",
             Self::ClaudeSonnet4_5 | Self::ClaudeSonnet4_5Thinking => "claude-sonnet-4-5-20250929",
             Self::Claude3_5Sonnet => "claude-3-5-sonnet-latest",
@@ -267,8 +249,6 @@ impl Model {
             Self::ClaudeOpus4_1 => "Claude Opus 4.1",
             Self::ClaudeOpus4Thinking => "Claude Opus 4 Thinking",
             Self::ClaudeOpus4_1Thinking => "Claude Opus 4.1 Thinking",
-            Self::ClaudeOpus4_5 => "Claude Opus 4.5",
-            Self::ClaudeOpus4_5Thinking => "Claude Opus 4.5 Thinking",
             Self::ClaudeSonnet4 => "Claude Sonnet 4",
             Self::ClaudeSonnet4Thinking => "Claude Sonnet 4 Thinking",
             Self::ClaudeSonnet4_5 => "Claude Sonnet 4.5",
@@ -294,8 +274,6 @@ impl Model {
             | Self::ClaudeOpus4_1
             | Self::ClaudeOpus4Thinking
             | Self::ClaudeOpus4_1Thinking
-            | Self::ClaudeOpus4_5
-            | Self::ClaudeOpus4_5Thinking
             | Self::ClaudeSonnet4
             | Self::ClaudeSonnet4Thinking
             | Self::ClaudeSonnet4_5
@@ -325,8 +303,6 @@ impl Model {
             | Self::ClaudeOpus4_1
             | Self::ClaudeOpus4Thinking
             | Self::ClaudeOpus4_1Thinking
-            | Self::ClaudeOpus4_5
-            | Self::ClaudeOpus4_5Thinking
             | Self::ClaudeSonnet4
             | Self::ClaudeSonnet4Thinking
             | Self::ClaudeSonnet4_5
@@ -350,8 +326,6 @@ impl Model {
             | Self::ClaudeOpus4_1
             | Self::ClaudeOpus4Thinking
             | Self::ClaudeOpus4_1Thinking
-            | Self::ClaudeOpus4_5
-            | Self::ClaudeOpus4_5Thinking
             | Self::ClaudeSonnet4
             | Self::ClaudeSonnet4Thinking
             | Self::ClaudeSonnet4_5
@@ -374,8 +348,6 @@ impl Model {
             | Self::ClaudeOpus4_1
             | Self::ClaudeOpus4Thinking
             | Self::ClaudeOpus4_1Thinking
-            | Self::ClaudeOpus4_5
-            | Self::ClaudeOpus4_5Thinking
             | Self::ClaudeSonnet4
             | Self::ClaudeSonnet4Thinking
             | Self::ClaudeSonnet4_5
@@ -400,7 +372,6 @@ impl Model {
         match self {
             Self::ClaudeOpus4
             | Self::ClaudeOpus4_1
-            | Self::ClaudeOpus4_5
             | Self::ClaudeSonnet4
             | Self::ClaudeSonnet4_5
             | Self::Claude3_5Sonnet
@@ -412,7 +383,6 @@ impl Model {
             | Self::Claude3Haiku => AnthropicModelMode::Default,
             Self::ClaudeOpus4Thinking
             | Self::ClaudeOpus4_1Thinking
-            | Self::ClaudeOpus4_5Thinking
             | Self::ClaudeSonnet4Thinking
             | Self::ClaudeSonnet4_5Thinking
             | Self::ClaudeHaiku4_5Thinking
