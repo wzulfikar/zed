@@ -1,10 +1,6 @@
-use std::cmp::Ordering;
-use std::collections::HashMap;
-use std::ops::Range;
-use std::path::Path;
-use std::rc::Rc;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{
+    cmp::Ordering, collections::HashMap, ops::Range, path::Path, rc::Rc, sync::Arc, time::Duration,
+};
 
 use acp_thread::{AcpThread, AcpThreadEvent, ThreadStatus};
 use agent::{ContextServerRegistry, DbThreadMetadata, HistoryEntry, HistoryStore};
@@ -65,10 +61,10 @@ use search::{BufferSearchBar, buffer_search};
 use settings::{Settings, update_settings_file};
 use theme::ThemeSettings;
 use ui::{
-    Callout, ContextMenu, ContextMenuEntry, KeyBinding, PopoverMenu, PopoverMenuHandle,
-    ProgressBar, Tab, TabBar, TabCloseSide, TabPosition, Tooltip, prelude::*,
+    Callout, ContextMenu, ContextMenuEntry, IconButtonShape, KeyBinding, PopoverMenu,
+    PopoverMenuHandle, ProgressBar, Tab, TabBar, TabCloseSide, TabPosition, Tooltip, prelude::*,
+    utils::WithRemSize,
 };
-use ui::{IconButtonShape, utils::WithRemSize};
 use util::ResultExt as _;
 use workspace::{
     CollaboratorId, DraggedSelection, DraggedTab, ToggleZoom, ToolbarItemView, Workspace,
@@ -3111,28 +3107,41 @@ impl AgentPanel {
 
         let selected_agent_label = self.selected_agent.label();
 
+        let is_thread_loading = self
+            .active_thread_view()
+            .map(|thread| thread.read(cx).is_loading())
+            .unwrap_or(false);
+
         let has_custom_icon = selected_agent_custom_icon.is_some();
+
         let selected_agent = div()
             .id("selected_agent_icon")
             .when_some(selected_agent_custom_icon, |this, icon_path| {
-                let label = selected_agent_label.clone();
                 this.px_1()
                     .child(Icon::from_external_svg(icon_path).color(Color::Muted))
-                    .tooltip(move |_window, cx| {
-                        Tooltip::with_meta(label.clone(), None, "Selected Agent", cx)
-                    })
             })
             .when(!has_custom_icon, |this| {
                 this.when_some(self.selected_agent.icon(), |this, icon| {
-                    let label = selected_agent_label.clone();
-                    this.px_1()
-                        .child(Icon::new(icon).color(Color::Muted))
-                        .tooltip(move |_window, cx| {
-                            Tooltip::with_meta(label.clone(), None, "Selected Agent", cx)
-                        })
+                    this.px_1().child(Icon::new(icon).color(Color::Muted))
                 })
             })
-            .into_any_element();
+            .tooltip(move |_, cx| {
+                Tooltip::with_meta(selected_agent_label.clone(), None, "Selected Agent", cx)
+            });
+
+        let selected_agent = if is_thread_loading {
+            selected_agent
+                .with_animation(
+                    "pulsating-icon",
+                    Animation::new(Duration::from_secs(1))
+                        .repeat()
+                        .with_easing(pulsating_between(0.2, 0.6)),
+                    |icon, delta| icon.opacity(delta),
+                )
+                .into_any_element()
+        } else {
+            selected_agent.into_any_element()
+        };
 
         h_flex()
             .id("agent-panel-toolbar")
