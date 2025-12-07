@@ -54,11 +54,12 @@ members = [
     "crates/diagnostics",
     "crates/docs_preprocessor",
     "crates/edit_prediction",
-    "crates/edit_prediction_button",
+    "crates/edit_prediction_types",
+    "crates/edit_prediction_ui",
     "crates/edit_prediction_context",
-    "crates/zeta2_tools",
     "crates/editor",
     "crates/eval",
+    "crates/eval_utils",
     "crates/explorer_command_injector",
     "crates/extension",
     "crates/extension_api",
@@ -200,10 +201,11 @@ members = [
     "crates/zed",
     "crates/zed_actions",
     "crates/zed_env_vars",
-    "crates/zeta",
-    "crates/zeta_cli",
+    "crates/edit_prediction_cli",
     "crates/zlog",
     "crates/zlog_settings",
+    "crates/ztracing",
+    "crates/ztracing_macro",
 
     #
     # Extensions
@@ -288,6 +290,7 @@ deepseek = { path = "crates/deepseek" }
 derive_refineable = { path = "crates/refineable/derive_refineable" }
 diagnostics = { path = "crates/diagnostics" }
 editor = { path = "crates/editor" }
+eval_utils = { path = "crates/eval_utils" }
 extension = { path = "crates/extension" }
 extension_host = { path = "crates/extension_host" }
 extensions_ui = { path = "crates/extensions_ui" }
@@ -311,10 +314,9 @@ http_client = { path = "crates/http_client" }
 http_client_tls = { path = "crates/http_client_tls" }
 icons = { path = "crates/icons" }
 image_viewer = { path = "crates/image_viewer" }
-edit_prediction = { path = "crates/edit_prediction" }
-edit_prediction_button = { path = "crates/edit_prediction_button" }
+edit_prediction_types = { path = "crates/edit_prediction_types" }
+edit_prediction_ui = { path = "crates/edit_prediction_ui" }
 edit_prediction_context = { path = "crates/edit_prediction_context" }
-zeta2_tools = { path = "crates/zeta2_tools" }
 inspector_ui = { path = "crates/inspector_ui" }
 install_cli = { path = "crates/install_cli" }
 journal = { path = "crates/journal" }
@@ -431,15 +433,17 @@ x_ai = { path = "crates/x_ai" }
 zed = { path = "crates/zed" }
 zed_actions = { path = "crates/zed_actions" }
 zed_env_vars = { path = "crates/zed_env_vars" }
-zeta = { path = "crates/zeta" }
+edit_prediction = { path = "crates/edit_prediction" }
 zlog = { path = "crates/zlog" }
 zlog_settings = { path = "crates/zlog_settings" }
+ztracing = { path = "crates/ztracing" }
+ztracing_macro = { path = "crates/ztracing_macro" }
 
 #
 # External crates
 #
 
-agent-client-protocol = { version = "0.7.0", features = ["unstable"] }
+agent-client-protocol = { version = "=0.8.0", features = ["unstable"] }
 aho-corasick = "1.1"
 alacritty_terminal = "0.25.1-rc1"
 any_vec = "0.14"
@@ -503,12 +507,12 @@ ec4rs = "1.1"
 emojis = "0.6.1"
 env_logger = "0.11"
 exec = "0.3.1"
-fancy-regex = "0.14.0"
+fancy-regex = "0.16.0"
 fork = "0.4.0"
 futures = "0.3"
 futures-batch = "0.6.1"
 futures-lite = "1.13"
-gh-workflow = { git = "https://github.com/zed-industries/gh-workflow", rev = "e5f883040530b4df36437f140084ee5cc7c1c9be" }
+gh-workflow = { git = "https://github.com/zed-industries/gh-workflow", rev = "09acfdf2bd5c1d6254abefd609c808ff73547b2c" }
 git2 = { version = "0.20.1", default-features = false }
 globset = "0.4"
 handlebars = "4.3"
@@ -529,7 +533,7 @@ indoc = "2"
 inventory = "0.3.19"
 itertools = "0.14.0"
 json_dotpath = "1.1"
-jsonschema = "0.30.0"
+jsonschema = "0.37.0"
 jsonwebtoken = "9.3"
 jupyter-protocol = "0.10.0"
 jupyter-websocket-client = "0.15.0"
@@ -656,7 +660,7 @@ sysinfo = "0.37.0"
 take-until = "0.2.0"
 tempfile = "3.20.0"
 thiserror = "2.0.12"
-tiktoken-rs = { git = "https://github.com/zed-industries/tiktoken-rs", rev = "7249f999c5fdf9bf3cc5c288c964454e4dac0c00" }
+tiktoken-rs = { git = "https://github.com/zed-industries/tiktoken-rs", rev = "2570c4387a8505fb8f1d3f3557454b474f1e8271" }
 time = { version = "0.3", features = [
     "macros",
     "parsing",
@@ -694,6 +698,7 @@ tree-sitter-ruby = "0.23"
 tree-sitter-rust = "0.24"
 tree-sitter-typescript = { git = "https://github.com/zed-industries/tree-sitter-typescript", rev = "e2c53597d6a5d9cf7bbe8dccde576fe1e46c5899" } # https://github.com/tree-sitter/tree-sitter-typescript/pull/347
 tree-sitter-yaml = { git = "https://github.com/zed-industries/tree-sitter-yaml", rev = "baff0b51c64ef6a1fb1f8390f3ad6015b83ec13a" }
+tracing = "0.1.40"
 unicase = "2.6"
 unicode-script = "0.5.7"
 unicode-segmentation = "1.10"
@@ -826,7 +831,7 @@ feature_flags = { codegen-units = 1 }
 file_icons = { codegen-units = 1 }
 fsevent = { codegen-units = 1 }
 image_viewer = { codegen-units = 1 }
-edit_prediction_button = { codegen-units = 1 }
+edit_prediction_ui = { codegen-units = 1 }
 install_cli = { codegen-units = 1 }
 journal = { codegen-units = 1 }
 json_schema_store = { codegen-units = 1 }

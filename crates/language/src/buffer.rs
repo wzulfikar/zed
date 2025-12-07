@@ -237,6 +237,8 @@ struct SelectionSet {
 pub struct Diagnostic {
     /// The name of the service that produced this diagnostic.
     pub source: Option<String>,
+    /// The ID provided by the dynamic registration that produced this diagnostic.
+    pub registration_id: Option<SharedString>,
     /// A machine-readable code that identifies this diagnostic.
     pub code: Option<NumberOrString>,
     pub code_description: Option<lsp::Uri>,
@@ -4020,6 +4022,20 @@ impl BufferSnapshot {
         })
     }
 
+    pub fn outline_items_as_offsets_containing<T: ToOffset>(
+        &self,
+        range: Range<T>,
+        include_extra_context: bool,
+        theme: Option<&SyntaxTheme>,
+    ) -> Vec<OutlineItem<usize>> {
+        self.outline_items_containing_internal(
+            range,
+            include_extra_context,
+            theme,
+            |buffer, range| range.to_offset(buffer),
+        )
+    }
+
     fn outline_items_containing_internal<T: ToOffset, U>(
         &self,
         range: Range<T>,
@@ -5390,6 +5406,7 @@ impl Default for Diagnostic {
             is_unnecessary: false,
             underline: true,
             data: None,
+            registration_id: None,
         }
     }
 }
