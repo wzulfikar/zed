@@ -337,7 +337,6 @@ impl CommitModal {
             active_repo,
             is_amend_pending,
             is_signoff_enabled,
-            workspace,
         ) = self.git_panel.update(cx, |git_panel, cx| {
             let (can_commit, tooltip) = git_panel.configure_commit_button(cx);
             let title = git_panel.commit_button_title();
@@ -355,7 +354,6 @@ impl CommitModal {
                 active_repo,
                 is_amend_pending,
                 is_signoff_enabled,
-                git_panel.workspace.clone(),
             )
         });
 
@@ -377,14 +375,7 @@ impl CommitModal {
             .style(ButtonStyle::Transparent);
 
         let branch_picker = PopoverMenu::new("popover-button")
-            .menu(move |window, cx| {
-                Some(branch_picker::popover(
-                    workspace.clone(),
-                    active_repo.clone(),
-                    window,
-                    cx,
-                ))
-            })
+            .menu(move |window, cx| Some(branch_picker::popover(active_repo.clone(), window, cx)))
             .with_handle(self.branch_list_handle.clone())
             .trigger_with_tooltip(
                 branch_picker_button,
@@ -521,7 +512,7 @@ impl CommitModal {
 
     fn toggle_branch_selector(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.branch_list_handle.is_focused(window, cx) {
-            self.focus_handle(cx).focus(window, cx)
+            self.focus_handle(cx).focus(window)
         } else {
             self.branch_list_handle.toggle(window, cx);
         }
@@ -587,8 +578,8 @@ impl Render for CommitModal {
                     .bg(cx.theme().colors().editor_background)
                     .border_1()
                     .border_color(cx.theme().colors().border_variant)
-                    .on_click(cx.listener(move |_, _: &ClickEvent, window, cx| {
-                        window.focus(&editor_focus_handle, cx);
+                    .on_click(cx.listener(move |_, _: &ClickEvent, window, _cx| {
+                        window.focus(&editor_focus_handle);
                     }))
                     .child(
                         div()

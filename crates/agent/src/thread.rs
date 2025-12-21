@@ -2,8 +2,7 @@ use crate::{
     ContextServerRegistry, CopyPathTool, CreateDirectoryTool, DbLanguageModel, DbThread,
     DeletePathTool, DiagnosticsTool, EditFileTool, FetchTool, FindPathTool, GrepTool,
     ListDirectoryTool, MovePathTool, NowTool, OpenTool, ProjectSnapshot, ReadFileTool,
-    RestoreFileFromDiskTool, SaveFileTool, SystemPromptTemplate, Template, Templates, TerminalTool,
-    ThinkingTool, WebSearchTool,
+    SystemPromptTemplate, Template, Templates, TerminalTool, ThinkingTool, WebSearchTool,
 };
 use acp_thread::{MentionUri, UserMessageId};
 use action_log::ActionLog;
@@ -108,13 +107,7 @@ impl Message {
 
     pub fn to_request(&self) -> Vec<LanguageModelRequestMessage> {
         match self {
-            Message::User(message) => {
-                if message.content.is_empty() {
-                    vec![]
-                } else {
-                    vec![message.to_request()]
-                }
-            }
+            Message::User(message) => vec![message.to_request()],
             Message::Agent(message) => message.to_request(),
             Message::Resume => vec![LanguageModelRequestMessage {
                 role: Role::User,
@@ -537,7 +530,6 @@ pub trait TerminalHandle {
     fn id(&self, cx: &AsyncApp) -> Result<acp::TerminalId>;
     fn current_output(&self, cx: &AsyncApp) -> Result<acp::TerminalOutputResponse>;
     fn wait_for_exit(&self, cx: &AsyncApp) -> Result<Shared<Task<acp::TerminalExitStatus>>>;
-    fn kill(&self, cx: &AsyncApp) -> Result<()>;
 }
 
 pub trait ThreadEnvironment {
@@ -1009,8 +1001,6 @@ impl Thread {
             self.project.clone(),
             self.action_log.clone(),
         ));
-        self.add_tool(SaveFileTool::new(self.project.clone()));
-        self.add_tool(RestoreFileFromDiskTool::new(self.project.clone()));
         self.add_tool(TerminalTool::new(self.project.clone(), environment));
         self.add_tool(ThinkingTool);
         self.add_tool(WebSearchTool);
@@ -1095,28 +1085,6 @@ impl Thread {
         })
     }
 
-    /// Get the total input token count as of the message before the given message.
-    ///
-    /// Returns `None` if:
-    /// - `target_id` is the first message (no previous message)
-    /// - The previous message hasn't received a response yet (no usage data)
-    /// - `target_id` is not found in the messages
-    pub fn tokens_before_message(&self, target_id: &UserMessageId) -> Option<u64> {
-        let mut previous_user_message_id: Option<&UserMessageId> = None;
-
-        for message in &self.messages {
-            if let Message::User(user_msg) = message {
-                if &user_msg.id == target_id {
-                    let prev_id = previous_user_message_id?;
-                    let usage = self.request_token_usage.get(prev_id)?;
-                    return Some(usage.input_tokens);
-                }
-                previous_user_message_id = Some(&user_msg.id);
-            }
-        }
-        None
-    }
-
     /// Look up the active profile and resolve its preferred model if one is configured.
     fn resolve_profile_model(
         profile_id: &AgentProfileId,
@@ -1169,6 +1137,11 @@ impl Thread {
     where
         T: Into<UserMessageContent>,
     {
+        let model = self.model().context("No language model configured")?;
+
+        log::info!("Thread::send called with model: {}", model.name().0);
+        self.advance_prompt_id();
+
         let content = content.into_iter().map(Into::into).collect::<Vec<_>>();
         log::debug!("Thread::send content: {:?}", content);
 
@@ -1176,57 +1149,8 @@ impl Thread {
             .push(Message::User(UserMessage { id, content }));
         cx.notify();
 
-        self.send_existing(cx)
-    }
-
-    pub fn send_existing(
-        &mut self,
-        cx: &mut Context<Self>,
-    ) -> Result<mpsc::UnboundedReceiver<Result<ThreadEvent>>> {
-        let model = self.model().context("No language model configured")?;
-
-        log::info!("Thread::send called with model: {}", model.name().0);
-        self.advance_prompt_id();
-
         log::debug!("Total messages in thread: {}", self.messages.len());
         self.run_turn(cx)
-    }
-
-    pub fn push_acp_user_block(
-        &mut self,
-        id: UserMessageId,
-        blocks: impl IntoIterator<Item = acp::ContentBlock>,
-        path_style: PathStyle,
-        cx: &mut Context<Self>,
-    ) {
-        let content = blocks
-            .into_iter()
-            .map(|block| UserMessageContent::from_content_block(block, path_style))
-            .collect::<Vec<_>>();
-        self.messages
-            .push(Message::User(UserMessage { id, content }));
-        cx.notify();
-    }
-
-    pub fn push_acp_agent_block(&mut self, block: acp::ContentBlock, cx: &mut Context<Self>) {
-        let text = match block {
-            acp::ContentBlock::Text(text_content) => text_content.text,
-            acp::ContentBlock::Image(_) => "[image]".to_string(),
-            acp::ContentBlock::Audio(_) => "[audio]".to_string(),
-            acp::ContentBlock::ResourceLink(resource_link) => resource_link.uri,
-            acp::ContentBlock::Resource(resource) => match resource.resource {
-                acp::EmbeddedResourceResource::TextResourceContents(resource) => resource.uri,
-                acp::EmbeddedResourceResource::BlobResourceContents(resource) => resource.uri,
-                _ => "[resource]".to_string(),
-            },
-            _ => "[unknown]".to_string(),
-        };
-
-        self.messages.push(Message::Agent(AgentMessage {
-            content: vec![AgentMessageContent::Text(text)],
-            ..Default::default()
-        }));
-        cx.notify();
     }
 
     #[cfg(feature = "eval")]
@@ -1725,10 +1649,6 @@ impl Thread {
         self.pending_summary_generation.is_some()
     }
 
-    pub fn is_generating_title(&self) -> bool {
-        self.pending_title_generation.is_some()
-    }
-
     pub fn summary(&mut self, cx: &mut Context<Self>) -> Shared<Task<Option<SharedString>>> {
         if let Some(summary) = self.summary.as_ref() {
             return Task::ready(Some(summary.clone())).shared();
@@ -1796,7 +1716,7 @@ impl Thread {
         task
     }
 
-    pub fn generate_title(&mut self, cx: &mut Context<Self>) {
+    fn generate_title(&mut self, cx: &mut Context<Self>) {
         let Some(model) = self.summarization_model.clone() else {
             return;
         };
@@ -2043,12 +1963,6 @@ impl Thread {
 
     fn tool(&self, name: &str) -> Option<Arc<dyn AnyAgentTool>> {
         self.running_turn.as_ref()?.tools.get(name).cloned()
-    }
-
-    pub fn has_tool(&self, name: &str) -> bool {
-        self.running_turn
-            .as_ref()
-            .is_some_and(|turn| turn.tools.contains_key(name))
     }
 
     fn build_request_messages(
@@ -2744,6 +2658,7 @@ impl From<UserMessageContent> for acp::ContentBlock {
 fn convert_image(image_content: acp::ImageContent) -> LanguageModelImage {
     LanguageModelImage {
         source: image_content.data.into(),
-        size: None,
+        // TODO: make this optional?
+        size: gpui::Size::new(0.into(), 0.into()),
     }
 }

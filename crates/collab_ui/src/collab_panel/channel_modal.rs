@@ -642,7 +642,7 @@ impl ChannelModalDelegate {
             });
             menu
         });
-        window.focus(&context_menu.focus_handle(cx), cx);
+        window.focus(&context_menu.focus_handle(cx));
         let subscription = cx.subscribe_in(
             &context_menu,
             window,

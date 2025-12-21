@@ -388,7 +388,7 @@ impl KeystrokeInput {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        window.focus(&self.inner_focus_handle, cx);
+        window.focus(&self.inner_focus_handle);
         self.clear_keystrokes(&ClearKeystrokes, window, cx);
         self.previous_modifiers = window.modifiers();
         #[cfg(test)]
@@ -407,7 +407,7 @@ impl KeystrokeInput {
         if !self.is_recording(window) {
             return;
         }
-        window.focus(&self.outer_focus_handle, cx);
+        window.focus(&self.outer_focus_handle);
         if let Some(close_keystrokes_start) = self.close_keystrokes_start.take()
             && close_keystrokes_start < self.keystrokes.len()
         {

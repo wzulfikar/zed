@@ -11,7 +11,7 @@ use crate::{AgentPanelOnboardingCard, ApiKeysWithoutProviders, ZedAiOnboarding};
 pub struct AgentPanelOnboarding {
     user_store: Entity<UserStore>,
     client: Arc<Client>,
-    has_configured_providers: bool,
+    configured_providers: Vec<(IconName, SharedString)>,
     continue_with_zed_ai: Arc<dyn Fn(&mut Window, &mut App)>,
 }
 
@@ -27,9 +27,8 @@ impl AgentPanelOnboarding {
             |this: &mut Self, _registry, event: &language_model::Event, cx| match event {
                 language_model::Event::ProviderStateChanged(_)
                 | language_model::Event::AddedProvider(_)
-                | language_model::Event::RemovedProvider(_)
-                | language_model::Event::ProvidersChanged => {
-                    this.has_configured_providers = Self::has_configured_providers(cx)
+                | language_model::Event::RemovedProvider(_) => {
+                    this.configured_providers = Self::compute_available_providers(cx)
                 }
                 _ => {}
             },
@@ -39,16 +38,20 @@ impl AgentPanelOnboarding {
         Self {
             user_store,
             client,
-            has_configured_providers: Self::has_configured_providers(cx),
+            configured_providers: Self::compute_available_providers(cx),
             continue_with_zed_ai: Arc::new(continue_with_zed_ai),
         }
     }
 
-    fn has_configured_providers(cx: &App) -> bool {
+    fn compute_available_providers(cx: &App) -> Vec<(IconName, SharedString)> {
         LanguageModelRegistry::read_global(cx)
-            .visible_providers()
+            .providers()
             .iter()
-            .any(|provider| provider.is_authenticated(cx) && provider.id() != ZED_CLOUD_PROVIDER_ID)
+            .filter(|provider| {
+                provider.is_authenticated(cx) && provider.id() != ZED_CLOUD_PROVIDER_ID
+            })
+            .map(|provider| (provider.icon(), provider.name().0))
+            .collect()
     }
 }
 
@@ -78,7 +81,7 @@ impl Render for AgentPanelOnboarding {
                 }),
             )
             .map(|this| {
-                if enrolled_in_trial || is_pro_user || self.has_configured_providers {
+                if enrolled_in_trial || is_pro_user || !self.configured_providers.is_empty() {
                     this
                 } else {
                     this.child(ApiKeysWithoutProviders::new())

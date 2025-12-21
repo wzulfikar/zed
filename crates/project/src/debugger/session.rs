@@ -3118,11 +3118,10 @@ async fn get_or_install_companion(node: NodeRuntime, cx: &mut AsyncApp) -> Resul
             .await
             .context("getting installed companion version")?
             .context("companion was not installed")?;
-        let version_folder = dir.join(version.to_string());
-        smol::fs::rename(temp_dir.path(), &version_folder)
+        smol::fs::rename(temp_dir.path(), dir.join(&version))
             .await
             .context("moving companion package into place")?;
-        Ok(version_folder)
+        Ok(dir.join(version))
     }
 
     let dir = paths::debug_adapters_dir().join("js-debug-companion");
@@ -3135,23 +3134,19 @@ async fn get_or_install_companion(node: NodeRuntime, cx: &mut AsyncApp) -> Resul
                     .await
                     .context("creating companion installation directory")?;
 
-                let children = smol::fs::read_dir(&dir)
+                let mut children = smol::fs::read_dir(&dir)
                     .await
                     .context("reading companion installation directory")?
                     .try_collect::<Vec<_>>()
                     .await
                     .context("reading companion installation directory entries")?;
+                children
+                    .sort_by_key(|child| semver::Version::parse(child.file_name().to_str()?).ok());
 
-                let latest_installed_version = children
-                    .iter()
-                    .filter_map(|child| {
-                        Some((
-                            child.path(),
-                            semver::Version::parse(child.file_name().to_str()?).ok()?,
-                        ))
-                    })
-                    .max_by_key(|(_, version)| version.clone());
-
+                let latest_installed_version = children.last().and_then(|child| {
+                    let version = child.file_name().into_string().ok()?;
+                    Some((child.path(), version))
+                });
                 let latest_version = node
                     .npm_package_latest_version(PACKAGE_NAME)
                     .await

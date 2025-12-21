@@ -316,7 +316,6 @@ impl SystemWindowTabController {
             .find_map(|(group, tabs)| tabs.iter().find(|tab| tab.id == id).map(|_| group));
 
         let current_group = current_group?;
-        // TODO: `.keys()` returns arbitrary order, what does "next" mean?
         let mut group_ids: Vec<_> = controller.tab_groups.keys().collect();
         let idx = group_ids.iter().position(|g| *g == current_group)?;
         let next_idx = (idx + 1) % group_ids.len();
@@ -341,7 +340,6 @@ impl SystemWindowTabController {
             .find_map(|(group, tabs)| tabs.iter().find(|tab| tab.id == id).map(|_| group));
 
         let current_group = current_group?;
-        // TODO: `.keys()` returns arbitrary order, what does "previous" mean?
         let mut group_ids: Vec<_> = controller.tab_groups.keys().collect();
         let idx = group_ids.iter().position(|g| *g == current_group)?;
         let prev_idx = if idx == 0 {
@@ -363,9 +361,12 @@ impl SystemWindowTabController {
 
     /// Get all tabs in the same window.
     pub fn tabs(&self, id: WindowId) -> Option<&Vec<SystemWindowTab>> {
-        self.tab_groups
-            .values()
-            .find(|tabs| tabs.iter().any(|tab| tab.id == id))
+        let tab_group = self
+            .tab_groups
+            .iter()
+            .find_map(|(group, tabs)| tabs.iter().find(|tab| tab.id == id).map(|_| *group))?;
+
+        self.tab_groups.get(&tab_group)
     }
 
     /// Initialize the visibility of the system window tab controller.
@@ -440,7 +441,7 @@ impl SystemWindowTabController {
     /// Insert a tab into a tab group.
     pub fn add_tab(cx: &mut App, id: WindowId, tabs: Vec<SystemWindowTab>) {
         let mut controller = cx.global_mut::<SystemWindowTabController>();
-        let Some(tab) = tabs.iter().find(|tab| tab.id == id).cloned() else {
+        let Some(tab) = tabs.clone().into_iter().find(|tab| tab.id == id) else {
             return;
         };
 
@@ -503,14 +504,16 @@ impl SystemWindowTabController {
             return;
         };
 
-        let initial_tabs_len = initial_tabs.len();
         let mut all_tabs = initial_tabs.clone();
-
-        for (_, mut tabs) in controller.tab_groups.drain() {
-            tabs.retain(|tab| !all_tabs[..initial_tabs_len].contains(tab));
-            all_tabs.extend(tabs);
+        for tabs in controller.tab_groups.values() {
+            all_tabs.extend(
+                tabs.iter()
+                    .filter(|tab| !initial_tabs.contains(tab))
+                    .cloned(),
+            );
         }
 
+        controller.tab_groups.clear();
         controller.tab_groups.insert(0, all_tabs);
     }
 
@@ -1077,9 +1080,11 @@ impl App {
         self.platform.window_appearance()
     }
 
-    /// Reads data from the platform clipboard.
-    pub fn read_from_clipboard(&self) -> Option<ClipboardItem> {
-        self.platform.read_from_clipboard()
+    /// Writes data to the primary selection buffer.
+    /// Only available on Linux.
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    pub fn write_to_primary(&self, item: ClipboardItem) {
+        self.platform.write_to_primary(item)
     }
 
     /// Writes data to the platform clipboard.
@@ -1094,31 +1099,9 @@ impl App {
         self.platform.read_from_primary()
     }
 
-    /// Writes data to the primary selection buffer.
-    /// Only available on Linux.
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    pub fn write_to_primary(&self, item: ClipboardItem) {
-        self.platform.write_to_primary(item)
-    }
-
-    /// Reads data from macOS's "Find" pasteboard.
-    ///
-    /// Used to share the current search string between apps.
-    ///
-    /// https://developer.apple.com/documentation/appkit/nspasteboard/name-swift.struct/find
-    #[cfg(target_os = "macos")]
-    pub fn read_from_find_pasteboard(&self) -> Option<ClipboardItem> {
-        self.platform.read_from_find_pasteboard()
-    }
-
-    /// Writes data to macOS's "Find" pasteboard.
-    ///
-    /// Used to share the current search string between apps.
-    ///
-    /// https://developer.apple.com/documentation/appkit/nspasteboard/name-swift.struct/find
-    #[cfg(target_os = "macos")]
-    pub fn write_to_find_pasteboard(&self, item: ClipboardItem) {
-        self.platform.write_to_find_pasteboard(item)
+    /// Reads data from the platform clipboard.
+    pub fn read_from_clipboard(&self) -> Option<ClipboardItem> {
+        self.platform.read_from_clipboard()
     }
 
     /// Writes credentials to the platform keychain.
@@ -1794,10 +1777,7 @@ impl App {
     /// Register a global handler for actions invoked via the keyboard. These handlers are run at
     /// the end of the bubble phase for actions, and so will only be invoked if there are no other
     /// handlers or if they called `cx.propagate()`.
-    pub fn on_action<A: Action>(
-        &mut self,
-        listener: impl Fn(&A, &mut Self) + 'static,
-    ) -> &mut Self {
+    pub fn on_action<A: Action>(&mut self, listener: impl Fn(&A, &mut Self) + 'static) {
         self.global_action_listeners
             .entry(TypeId::of::<A>())
             .or_default()
@@ -1807,7 +1787,6 @@ impl App {
                     listener(action, cx)
                 }
             }));
-        self
     }
 
     /// Event handlers propagate events by default. Call this method to stop dispatching to
@@ -1917,11 +1896,8 @@ impl App {
     pub(crate) fn clear_pending_keystrokes(&mut self) {
         for window in self.windows() {
             window
-                .update(self, |_, window, cx| {
-                    if window.pending_input_keystrokes().is_some() {
-                        window.clear_pending_keystrokes();
-                        window.pending_input_changed(cx);
-                    }
+                .update(self, |_, window, _| {
+                    window.clear_pending_keystrokes();
                 })
                 .ok();
         }

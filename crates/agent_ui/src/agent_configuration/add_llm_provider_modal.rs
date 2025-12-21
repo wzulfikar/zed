@@ -446,17 +446,17 @@ impl AddLlmProviderModal {
             })
     }
 
-    fn on_tab(&mut self, _: &menu::SelectNext, window: &mut Window, cx: &mut Context<Self>) {
-        window.focus_next(cx);
+    fn on_tab(&mut self, _: &menu::SelectNext, window: &mut Window, _: &mut Context<Self>) {
+        window.focus_next();
     }
 
     fn on_tab_prev(
         &mut self,
         _: &menu::SelectPrevious,
         window: &mut Window,
-        cx: &mut Context<Self>,
+        _: &mut Context<Self>,
     ) {
-        window.focus_prev(cx);
+        window.focus_prev();
     }
 }
 
@@ -493,7 +493,7 @@ impl Render for AddLlmProviderModal {
             .on_action(cx.listener(Self::on_tab))
             .on_action(cx.listener(Self::on_tab_prev))
             .capture_any_mouse_down(cx.listener(|this, _, window, cx| {
-                this.focus_handle(cx).focus(window, cx);
+                this.focus_handle(cx).focus(window);
             }))
             .child(
                 Modal::new("configure-context-server", None)

@@ -151,14 +151,7 @@ impl BatchedTextRun {
                 std::slice::from_ref(&self.style),
                 Some(dimensions.cell_width),
             )
-            .paint(
-                pos,
-                dimensions.line_height,
-                gpui::TextAlign::Left,
-                None,
-                window,
-                cx,
-            );
+            .paint(pos, dimensions.line_height, window, cx);
     }
 }
 
@@ -639,7 +632,7 @@ impl TerminalElement {
     ) -> impl Fn(&E, &mut Window, &mut App) {
         move |event, window, cx| {
             if steal_focus {
-                window.focus(&focus_handle, cx);
+                window.focus(&focus_handle);
             } else if !focus_handle.is_focused(window) {
                 return;
             }
@@ -668,7 +661,7 @@ impl TerminalElement {
             let terminal_view = terminal_view.clone();
 
             move |e, window, cx| {
-                window.focus(&focus, cx);
+                window.focus(&focus);
 
                 let scroll_top = terminal_view.read(cx).scroll_top;
                 terminal.update(cx, |terminal, cx| {
@@ -1333,14 +1326,8 @@ impl Element for TerminalElement {
                                     }],
                                     None
                                 );
-                                shaped_line.paint(
-                                    ime_position,
-                                    layout.dimensions.line_height,
-                                    gpui::TextAlign::Left,
-                                    None,
-                                    window,
-                                    cx,
-                                )
+                                shaped_line
+                                    .paint(ime_position, layout.dimensions.line_height, window, cx)
                                     .log_err();
                             }
 

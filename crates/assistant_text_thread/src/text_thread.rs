@@ -5,7 +5,7 @@ use assistant_slash_command::{
     SlashCommandResult, SlashCommandWorkingSet,
 };
 use assistant_slash_commands::FileCommandMetadata;
-use client::{self, ModelRequestUsage, RequestUsage, proto};
+use client::{self, ModelRequestUsage, RequestUsage, proto, telemetry::Telemetry};
 use clock::ReplicaId;
 use cloud_llm_client::{CompletionIntent, UsageLimit};
 use collections::{HashMap, HashSet};
@@ -19,11 +19,10 @@ use gpui::{
 use itertools::Itertools as _;
 use language::{AnchorRangeExt, Bias, Buffer, LanguageRegistry, OffsetRangeExt, Point, ToOffset};
 use language_model::{
-    AnthropicCompletionType, AnthropicEventData, AnthropicEventType, LanguageModel,
-    LanguageModelCacheConfiguration, LanguageModelCompletionEvent, LanguageModelImage,
-    LanguageModelRegistry, LanguageModelRequest, LanguageModelRequestMessage,
+    LanguageModel, LanguageModelCacheConfiguration, LanguageModelCompletionEvent,
+    LanguageModelImage, LanguageModelRegistry, LanguageModelRequest, LanguageModelRequestMessage,
     LanguageModelToolUseId, MessageContent, PaymentRequiredError, Role, StopReason,
-    report_anthropic_event,
+    report_assistant_event,
 };
 use open_ai::Model as OpenAiModel;
 use paths::text_threads_dir;
@@ -41,7 +40,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-
+use telemetry_events::{AssistantEventData, AssistantKind, AssistantPhase};
 use text::{BufferSnapshot, ToPoint};
 use ui::IconName;
 use util::{ResultExt, TryFutureExt, post_inc};
@@ -687,6 +686,7 @@ pub struct TextThread {
     pending_cache_warming_task: Task<Option<()>>,
     path: Option<Arc<Path>>,
     _subscriptions: Vec<Subscription>,
+    telemetry: Option<Arc<Telemetry>>,
     language_registry: Arc<LanguageRegistry>,
     project: Option<WeakEntity<Project>>,
     prompt_builder: Arc<PromptBuilder>,
@@ -709,6 +709,7 @@ impl TextThread {
     pub fn local(
         language_registry: Arc<LanguageRegistry>,
         project: Option<WeakEntity<Project>>,
+        telemetry: Option<Arc<Telemetry>>,
         prompt_builder: Arc<PromptBuilder>,
         slash_commands: Arc<SlashCommandWorkingSet>,
         cx: &mut Context<Self>,
@@ -721,6 +722,7 @@ impl TextThread {
             prompt_builder,
             slash_commands,
             project,
+            telemetry,
             cx,
         )
     }
@@ -741,6 +743,7 @@ impl TextThread {
         prompt_builder: Arc<PromptBuilder>,
         slash_commands: Arc<SlashCommandWorkingSet>,
         project: Option<WeakEntity<Project>>,
+        telemetry: Option<Arc<Telemetry>>,
         cx: &mut Context<Self>,
     ) -> Self {
         let buffer = cx.new(|_cx| {
@@ -781,6 +784,7 @@ impl TextThread {
             completion_mode: AgentSettings::get_global(cx).preferred_completion_mode,
             path: None,
             buffer,
+            telemetry,
             project,
             language_registry,
             slash_commands,
@@ -870,6 +874,7 @@ impl TextThread {
         prompt_builder: Arc<PromptBuilder>,
         slash_commands: Arc<SlashCommandWorkingSet>,
         project: Option<WeakEntity<Project>>,
+        telemetry: Option<Arc<Telemetry>>,
         cx: &mut Context<Self>,
     ) -> Self {
         let id = saved_context.id.clone().unwrap_or_else(TextThreadId::new);
@@ -881,6 +886,7 @@ impl TextThread {
             prompt_builder,
             slash_commands,
             project,
+            telemetry,
             cx,
         );
         this.path = Some(path);
@@ -2206,25 +2212,23 @@ impl TextThread {
                         .read(cx)
                         .language()
                         .map(|language| language.name());
-
-                    telemetry::event!(
-                        "Assistant Responded",
-                        conversation_id = this.id.0.clone(),
-                        kind = "panel",
-                        phase = "response",
-                        model =  model.telemetry_id(),
-                        model_provider = model.provider_id().to_string(),
-                        response_latency,
-                        error_message,
-                        language_name = language_name.as_ref().map(|name| name.to_proto()),
+                    report_assistant_event(
+                        AssistantEventData {
+                            conversation_id: Some(this.id.0.clone()),
+                            kind: AssistantKind::Panel,
+                            phase: AssistantPhase::Response,
+                            message_id: None,
+                            model: model.telemetry_id(),
+                            model_provider: model.provider_id().to_string(),
+                            response_latency,
+                            error_message,
+                            language_name: language_name.map(|name| name.to_proto()),
+                        },
+                        this.telemetry.clone(),
+                        cx.http_client(),
+                        model.api_key(cx),
+                        cx.background_executor(),
                     );
-
-                    report_anthropic_event(&model, AnthropicEventData {
-                        completion_type: AnthropicCompletionType::Panel,
-                        event: AnthropicEventType::Response,
-                        language_name: language_name.map(|name| name.to_proto()),
-                        message_id: None,
-                    }, cx);
 
                     if let Ok(stop_reason) = result {
                         match stop_reason {

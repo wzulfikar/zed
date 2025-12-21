@@ -4,6 +4,7 @@ mod pages;
 
 use anyhow::Result;
 use editor::{Editor, EditorEvent};
+use feature_flags::FeatureFlag;
 use fuzzy::StringMatchCandidate;
 use gpui::{
     Action, App, ClipboardItem, DEFAULT_ADDITIONAL_WINDOW_SIZE, Div, Entity, FocusHandle,
@@ -345,8 +346,8 @@ impl NonFocusableHandle {
     fn from_handle(handle: FocusHandle, window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| {
             let _subscription = cx.on_focus(&handle, window, {
-                move |_, window, cx| {
-                    window.focus_next(cx);
+                move |_, window, _| {
+                    window.focus_next();
                 }
             });
             Self {
@@ -367,6 +368,12 @@ impl Focusable for NonFocusableHandle {
 struct SettingsFieldMetadata {
     placeholder: Option<&'static str>,
     should_do_titlecase: Option<bool>,
+}
+
+pub struct SettingsUiFeatureFlag;
+
+impl FeatureFlag for SettingsUiFeatureFlag {
+    const NAME: &'static str = "settings-ui";
 }
 
 pub fn init(cx: &mut App) {
@@ -602,7 +609,7 @@ pub fn open_settings_editor(
                 focus: true,
                 show: true,
                 is_movable: true,
-                kind: gpui::WindowKind::Normal,
+                kind: gpui::WindowKind::Floating,
                 window_background: cx.theme().window_background_appearance(),
                 app_id: Some(app_id.to_owned()),
                 window_decorations: Some(window_decorations),
@@ -731,7 +738,6 @@ enum SettingsPageItem {
     SettingItem(SettingItem),
     SubPageLink(SubPageLink),
     DynamicItem(DynamicItem),
-    ActionLink(ActionLink),
 }
 
 impl std::fmt::Debug for SettingsPageItem {
@@ -746,9 +752,6 @@ impl std::fmt::Debug for SettingsPageItem {
             }
             SettingsPageItem::DynamicItem(dynamic_item) => {
                 write!(f, "DynamicItem({})", dynamic_item.discriminant.title)
-            }
-            SettingsPageItem::ActionLink(action_link) => {
-                write!(f, "ActionLink({})", action_link.title)
             }
         }
     }
@@ -890,7 +893,7 @@ impl SettingsPageItem {
                             .size(ButtonSize::Medium)
                             .on_click({
                                 let sub_page_link = sub_page_link.clone();
-                                cx.listener(move |this, _, window, cx| {
+                                cx.listener(move |this, _, _, cx| {
                                     let mut section_index = item_index;
                                     let current_page = this.current_page();
 
@@ -909,7 +912,7 @@ impl SettingsPageItem {
                                         )
                                     };
 
-                                    this.push_sub_page(sub_page_link.clone(), header, window, cx)
+                                    this.push_sub_page(sub_page_link.clone(), header, cx)
                                 })
                             }),
                         )
@@ -977,55 +980,6 @@ impl SettingsPageItem {
 
                 return content.into_any_element();
             }
-            SettingsPageItem::ActionLink(action_link) => v_flex()
-                .group("setting-item")
-                .px_8()
-                .child(
-                    h_flex()
-                        .id(action_link.title.clone())
-                        .w_full()
-                        .min_w_0()
-                        .justify_between()
-                        .map(apply_padding)
-                        .child(
-                            v_flex()
-                                .relative()
-                                .w_full()
-                                .max_w_1_2()
-                                .child(Label::new(action_link.title.clone()))
-                                .when_some(
-                                    action_link.description.as_ref(),
-                                    |this, description| {
-                                        this.child(
-                                            Label::new(description.clone())
-                                                .size(LabelSize::Small)
-                                                .color(Color::Muted),
-                                        )
-                                    },
-                                ),
-                        )
-                        .child(
-                            Button::new(
-                                ("action-link".into(), action_link.title.clone()),
-                                action_link.button_text.clone(),
-                            )
-                            .icon(IconName::ArrowUpRight)
-                            .tab_index(0_isize)
-                            .icon_position(IconPosition::End)
-                            .icon_color(Color::Muted)
-                            .icon_size(IconSize::Small)
-                            .style(ButtonStyle::OutlinedGhost)
-                            .size(ButtonSize::Medium)
-                            .on_click({
-                                let on_click = action_link.on_click.clone();
-                                cx.listener(move |this, _, window, cx| {
-                                    on_click(this, window, cx);
-                                })
-                            }),
-                        ),
-                )
-                .when(!is_last, |this| this.child(Divider::horizontal()))
-                .into_any_element(),
         }
     }
 }
@@ -1255,20 +1209,6 @@ struct SubPageLink {
 }
 
 impl PartialEq for SubPageLink {
-    fn eq(&self, other: &Self) -> bool {
-        self.title == other.title
-    }
-}
-
-#[derive(Clone)]
-struct ActionLink {
-    title: SharedString,
-    description: Option<SharedString>,
-    button_text: SharedString,
-    on_click: Arc<dyn Fn(&mut SettingsWindow, &mut Window, &mut App) + Send + Sync>,
-}
-
-impl PartialEq for ActionLink {
     fn eq(&self, other: &Self) -> bool {
         self.title == other.title
     }
@@ -1537,7 +1477,7 @@ impl SettingsWindow {
         this.build_search_index();
 
         this.search_bar.update(cx, |editor, cx| {
-            editor.focus_handle(cx).focus(window, cx);
+            editor.focus_handle(cx).focus(window);
         });
 
         this
@@ -1692,9 +1632,6 @@ impl SettingsWindow {
                         } else {
                             any_found_since_last_header = true;
                         }
-                    }
-                    SettingsPageItem::ActionLink(_) => {
-                        any_found_since_last_header = true;
                     }
                 }
             }
@@ -1934,18 +1871,6 @@ impl SettingsWindow {
                             sub_page_link.title.as_ref(),
                         );
                     }
-                    SettingsPageItem::ActionLink(action_link) => {
-                        documents.push(bm25::Document {
-                            id: key_index,
-                            contents: [page.title, header_str, action_link.title.as_ref()]
-                                .join("\n"),
-                        });
-                        push_candidates(
-                            &mut fuzzy_match_candidates,
-                            key_index,
-                            action_link.title.as_ref(),
-                        );
-                    }
                 }
                 push_candidates(&mut fuzzy_match_candidates, key_index, page.title);
                 push_candidates(&mut fuzzy_match_candidates, key_index, header_str);
@@ -2174,7 +2099,7 @@ impl SettingsWindow {
                     let focus_handle = focus_handle.clone();
                     move |this, _: &gpui::ClickEvent, window, cx| {
                         this.change_file(ix, window, cx);
-                        focus_handle.focus(window, cx);
+                        focus_handle.focus(window);
                     }
                 }))
             };
@@ -2251,7 +2176,7 @@ impl SettingsWindow {
                                                             this.update(cx, |this, cx| {
                                                                 this.change_file(ix, window, cx);
                                                             });
-                                                            focus_handle.focus(window, cx);
+                                                            focus_handle.focus(window);
                                                         }
                                                     },
                                                 );
@@ -2385,7 +2310,7 @@ impl SettingsWindow {
                 let focused_entry_parent = this.root_entry_containing(focused_entry);
                 if this.navbar_entries[focused_entry_parent].expanded {
                     this.toggle_navbar_entry(focused_entry_parent);
-                    window.focus(&this.navbar_entries[focused_entry_parent].focus_handle, cx);
+                    window.focus(&this.navbar_entries[focused_entry_parent].focus_handle);
                 }
                 cx.notify();
             }))
@@ -2534,7 +2459,6 @@ impl SettingsWindow {
                                                         window.focus(
                                                             &this.navbar_entries[entry_index]
                                                                 .focus_handle,
-                                                            cx,
                                                         );
                                                         cx.notify();
                                                     },
@@ -2659,7 +2583,7 @@ impl SettingsWindow {
         // back to back.
         cx.on_next_frame(window, move |_, window, cx| {
             if let Some(handle) = handle_to_focus.as_ref() {
-                window.focus(handle, cx);
+                window.focus(handle);
             }
 
             cx.on_next_frame(window, |_, _, cx| {
@@ -2726,7 +2650,7 @@ impl SettingsWindow {
         };
         self.navbar_scroll_handle
             .scroll_to_item(position, gpui::ScrollStrategy::Top);
-        window.focus(&self.navbar_entries[nav_entry_index].focus_handle, cx);
+        window.focus(&self.navbar_entries[nav_entry_index].focus_handle);
         cx.notify();
     }
 
@@ -2996,8 +2920,8 @@ impl SettingsWindow {
                             IconButton::new("back-btn", IconName::ArrowLeft)
                                 .icon_size(IconSize::Small)
                                 .shape(IconButtonShape::Square)
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.pop_sub_page(window, cx);
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.pop_sub_page(cx);
                                 })),
                         )
                         .child(self.render_sub_page_breadcrumbs()),
@@ -3101,7 +3025,7 @@ impl SettingsWindow {
             .id("settings-ui-page")
             .on_action(cx.listener(|this, _: &menu::SelectNext, window, cx| {
                 if !sub_page_stack().is_empty() {
-                    window.focus_next(cx);
+                    window.focus_next();
                     return;
                 }
                 for (logical_index, (actual_index, _)) in this.visible_page_items().enumerate() {
@@ -3121,7 +3045,7 @@ impl SettingsWindow {
                         cx.on_next_frame(window, |_, window, cx| {
                             cx.notify();
                             cx.on_next_frame(window, |_, window, cx| {
-                                window.focus_next(cx);
+                                window.focus_next();
                                 cx.notify();
                             });
                         });
@@ -3129,11 +3053,11 @@ impl SettingsWindow {
                         return;
                     }
                 }
-                window.focus_next(cx);
+                window.focus_next();
             }))
             .on_action(cx.listener(|this, _: &menu::SelectPrevious, window, cx| {
                 if !sub_page_stack().is_empty() {
-                    window.focus_prev(cx);
+                    window.focus_prev();
                     return;
                 }
                 let mut prev_was_header = false;
@@ -3153,7 +3077,7 @@ impl SettingsWindow {
                         cx.on_next_frame(window, |_, window, cx| {
                             cx.notify();
                             cx.on_next_frame(window, |_, window, cx| {
-                                window.focus_prev(cx);
+                                window.focus_prev();
                                 cx.notify();
                             });
                         });
@@ -3162,7 +3086,7 @@ impl SettingsWindow {
                     }
                     prev_was_header = is_header;
                 }
-                window.focus_prev(cx);
+                window.focus_prev();
             }))
             .when(sub_page_stack().is_empty(), |this| {
                 this.vertical_scrollbar_for(&self.list_state, window, cx)
@@ -3356,28 +3280,23 @@ impl SettingsWindow {
         &mut self,
         sub_page_link: SubPageLink,
         section_header: &'static str,
-        window: &mut Window,
         cx: &mut Context<SettingsWindow>,
     ) {
         sub_page_stack_mut().push(SubPage {
             link: sub_page_link,
             section_header,
         });
-        self.sub_page_scroll_handle
-            .set_offset(point(px(0.), px(0.)));
-        self.content_focus_handle.focus_handle(cx).focus(window, cx);
         cx.notify();
     }
 
-    fn pop_sub_page(&mut self, window: &mut Window, cx: &mut Context<SettingsWindow>) {
+    fn pop_sub_page(&mut self, cx: &mut Context<SettingsWindow>) {
         sub_page_stack_mut().pop();
-        self.content_focus_handle.focus_handle(cx).focus(window, cx);
         cx.notify();
     }
 
-    fn focus_file_at_index(&mut self, index: usize, window: &mut Window, cx: &mut App) {
+    fn focus_file_at_index(&mut self, index: usize, window: &mut Window) {
         if let Some((_, handle)) = self.files.get(index) {
-            handle.focus(window, cx);
+            handle.focus(window);
         }
     }
 
@@ -3457,7 +3376,7 @@ impl Render for SettingsWindow {
                             window.minimize_window();
                         })
                         .on_action(cx.listener(|this, _: &search::FocusSearch, window, cx| {
-                            this.search_bar.focus_handle(cx).focus(window, cx);
+                            this.search_bar.focus_handle(cx).focus(window);
                         }))
                         .on_action(cx.listener(|this, _: &ToggleFocusNav, window, cx| {
                             if this
@@ -3477,8 +3396,8 @@ impl Render for SettingsWindow {
                             }
                         }))
                         .on_action(cx.listener(
-                            |this, FocusFile(file_index): &FocusFile, window, cx| {
-                                this.focus_file_at_index(*file_index as usize, window, cx);
+                            |this, FocusFile(file_index): &FocusFile, window, _| {
+                                this.focus_file_at_index(*file_index as usize, window);
                             },
                         ))
                         .on_action(cx.listener(|this, _: &FocusNextFile, window, cx| {
@@ -3486,11 +3405,11 @@ impl Render for SettingsWindow {
                                 this.focused_file_index(window, cx) + 1,
                                 this.files.len().saturating_sub(1),
                             );
-                            this.focus_file_at_index(next_index, window, cx);
+                            this.focus_file_at_index(next_index, window);
                         }))
                         .on_action(cx.listener(|this, _: &FocusPreviousFile, window, cx| {
                             let prev_index = this.focused_file_index(window, cx).saturating_sub(1);
-                            this.focus_file_at_index(prev_index, window, cx);
+                            this.focus_file_at_index(prev_index, window);
                         }))
                         .on_action(cx.listener(|this, _: &menu::SelectNext, window, cx| {
                             if this
@@ -3500,11 +3419,11 @@ impl Render for SettingsWindow {
                             {
                                 this.focus_and_scroll_to_first_visible_nav_entry(window, cx);
                             } else {
-                                window.focus_next(cx);
+                                window.focus_next();
                             }
                         }))
-                        .on_action(|_: &menu::SelectPrevious, window, cx| {
-                            window.focus_prev(cx);
+                        .on_action(|_: &menu::SelectPrevious, window, _| {
+                            window.focus_prev();
                         })
                         .flex()
                         .flex_row()

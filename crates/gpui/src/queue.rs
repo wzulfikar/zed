@@ -1,5 +1,4 @@
 use std::{
-    collections::VecDeque,
     fmt,
     iter::FusedIterator,
     sync::{Arc, atomic::AtomicUsize},
@@ -10,9 +9,9 @@ use rand::{Rng, SeedableRng, rngs::SmallRng};
 use crate::Priority;
 
 struct PriorityQueues<T> {
-    high_priority: VecDeque<T>,
-    medium_priority: VecDeque<T>,
-    low_priority: VecDeque<T>,
+    high_priority: Vec<T>,
+    medium_priority: Vec<T>,
+    low_priority: Vec<T>,
 }
 
 impl<T> PriorityQueues<T> {
@@ -43,9 +42,9 @@ impl<T> PriorityQueueState<T> {
         let mut queues = self.queues.lock();
         match priority {
             Priority::Realtime(_) => unreachable!(),
-            Priority::High => queues.high_priority.push_back(item),
-            Priority::Medium => queues.medium_priority.push_back(item),
-            Priority::Low => queues.low_priority.push_back(item),
+            Priority::High => queues.high_priority.push(item),
+            Priority::Medium => queues.medium_priority.push(item),
+            Priority::Low => queues.low_priority.push(item),
         };
         self.condvar.notify_one();
         Ok(())
@@ -59,7 +58,8 @@ impl<T> PriorityQueueState<T> {
             return Err(crate::queue::RecvError);
         }
 
-        while queues.is_empty() {
+        // parking_lot doesn't do spurious wakeups so an if is fine
+        if queues.is_empty() {
             self.condvar.wait(&mut queues);
         }
 
@@ -142,9 +142,9 @@ impl<T> PriorityQueueReceiver<T> {
     pub(crate) fn new() -> (PriorityQueueSender<T>, Self) {
         let state = PriorityQueueState {
             queues: parking_lot::Mutex::new(PriorityQueues {
-                high_priority: VecDeque::new(),
-                medium_priority: VecDeque::new(),
-                low_priority: VecDeque::new(),
+                high_priority: Vec::new(),
+                medium_priority: Vec::new(),
+                low_priority: Vec::new(),
             }),
             condvar: parking_lot::Condvar::new(),
             receiver_count: AtomicUsize::new(1),
@@ -227,7 +227,7 @@ impl<T> PriorityQueueReceiver<T> {
         if !queues.high_priority.is_empty() {
             let flip = self.rand.random_ratio(P::High.probability(), mass);
             if flip {
-                return Ok(queues.high_priority.pop_front());
+                return Ok(queues.high_priority.pop());
             }
             mass -= P::High.probability();
         }
@@ -235,7 +235,7 @@ impl<T> PriorityQueueReceiver<T> {
         if !queues.medium_priority.is_empty() {
             let flip = self.rand.random_ratio(P::Medium.probability(), mass);
             if flip {
-                return Ok(queues.medium_priority.pop_front());
+                return Ok(queues.medium_priority.pop());
             }
             mass -= P::Medium.probability();
         }
@@ -243,7 +243,7 @@ impl<T> PriorityQueueReceiver<T> {
         if !queues.low_priority.is_empty() {
             let flip = self.rand.random_ratio(P::Low.probability(), mass);
             if flip {
-                return Ok(queues.low_priority.pop_front());
+                return Ok(queues.low_priority.pop());
             }
         }
 
@@ -265,7 +265,7 @@ impl<T> Iterator for Iter<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.0.pop().ok()
+        self.0.pop_inner(true).ok().flatten()
     }
 }
 impl<T> FusedIterator for Iter<T> {}
@@ -283,7 +283,7 @@ impl<T> Iterator for TryIter<T> {
             return None;
         }
 
-        let res = self.receiver.try_pop();
+        let res = self.receiver.pop_inner(false);
         self.ended = res.is_err();
 
         res.transpose()

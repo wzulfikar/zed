@@ -1,4 +1,3 @@
-use super::ns_string;
 use crate::{
     DevicePixels, ForegroundExecutor, SharedString, SourceMetadata,
     platform::{ScreenCaptureFrame, ScreenCaptureSource, ScreenCaptureStream},
@@ -8,7 +7,7 @@ use anyhow::{Result, anyhow};
 use block::ConcreteBlock;
 use cocoa::{
     base::{YES, id, nil},
-    foundation::NSArray,
+    foundation::{NSArray, NSString},
 };
 use collections::HashMap;
 use core_foundation::base::TCFType;
@@ -110,21 +109,13 @@ impl ScreenCaptureSource for MacScreenCaptureSource {
             let _: id = msg_send![configuration, setHeight: meta.resolution.height.0 as i64];
             let stream: id = msg_send![stream, initWithFilter:filter configuration:configuration delegate:delegate];
 
-            // Stream contains filter, configuration, and delegate internally so we release them here
-            // to prevent a memory leak when steam is dropped
-            let _: () = msg_send![filter, release];
-            let _: () = msg_send![configuration, release];
-            let _: () = msg_send![delegate, release];
-
             let (mut tx, rx) = oneshot::channel();
 
             let mut error: id = nil;
             let _: () = msg_send![stream, addStreamOutput:output type:SCStreamOutputTypeScreen sampleHandlerQueue:0 error:&mut error as *mut id];
             if error != nil {
                 let message: id = msg_send![error, localizedDescription];
-                let _: () = msg_send![stream, release];
-                let _: () = msg_send![output, release];
-                tx.send(Err(anyhow!("failed to add stream output {message:?}")))
+                tx.send(Err(anyhow!("failed to add stream  output {message:?}")))
                     .ok();
                 return rx;
             }
@@ -140,10 +131,8 @@ impl ScreenCaptureSource for MacScreenCaptureSource {
                         };
                         Ok(Box::new(stream) as Box<dyn ScreenCaptureStream>)
                     } else {
-                        let _: () = msg_send![stream, release];
-                        let _: () = msg_send![output, release];
                         let message: id = msg_send![error, localizedDescription];
-                        Err(anyhow!("failed to start screen capture stream {message:?}"))
+                        Err(anyhow!("failed to stop screen capture stream {message:?}"))
                     };
                     if let Some(tx) = tx.borrow_mut().take() {
                         tx.send(result).ok();
@@ -206,7 +195,7 @@ unsafe fn screen_id_to_human_label() -> HashMap<CGDirectDisplayID, ScreenMeta> {
     let screens: id = msg_send![class!(NSScreen), screens];
     let count: usize = msg_send![screens, count];
     let mut map = HashMap::default();
-    let screen_number_key = unsafe { ns_string("NSScreenNumber") };
+    let screen_number_key = unsafe { NSString::alloc(nil).init_str("NSScreenNumber") };
     for i in 0..count {
         let screen: id = msg_send![screens, objectAtIndex: i];
         let device_desc: id = msg_send![screen, deviceDescription];

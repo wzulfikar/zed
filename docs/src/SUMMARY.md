@@ -23,9 +23,6 @@
 - [Visual Customization](./visual-customization.md)
 - [Vim Mode](./vim.md)
 - [Helix Mode](./helix.md)
-- [Privacy and Security](./ai/privacy-and-security.md)
-  - [Worktree Trust](./worktree-trust.md)
-  - [AI Improvement](./ai/ai-improvement.md)
 
 <!-- - [Globs](./globs.md) -->
 <!-- - [Fonts](./fonts.md) -->
@@ -46,7 +43,6 @@
 - [Tasks](./tasks.md)
 - [Tab Switcher](./tab-switcher.md)
 - [Remote Development](./remote-development.md)
-- [Dev Containers](./dev-containers.md)
 - [Environment Variables](./environment.md)
 - [REPL](./repl.md)
 
@@ -73,6 +69,8 @@
   - [Models](./ai/models.md)
   - [Plans and Usage](./ai/plans-and-usage.md)
   - [Billing](./ai/billing.md)
+- [Privacy and Security](./ai/privacy-and-security.md)
+  - [AI Improvement](./ai/ai-improvement.md)
 
 # Extensions
 
@@ -88,13 +86,9 @@
 - [Agent Server Extensions](./extensions/agent-servers.md)
 - [MCP Server Extensions](./extensions/mcp-extensions.md)
 
-# Coming From...
+# Migrate
 
 - [VS Code](./migrate/vs-code.md)
-- [IntelliJ IDEA](./migrate/intellij.md)
-- [PyCharm](./migrate/pycharm.md)
-- [WebStorm](./migrate/webstorm.md)
-- [RustRover](./migrate/rustrover.md)
 
 # Language Support
 
@@ -177,6 +171,7 @@
   - [Linux](./development/linux.md)
   - [Windows](./development/windows.md)
   - [FreeBSD](./development/freebsd.md)
+  - [Local Collaboration](./development/local-collaboration.md)
   - [Using Debuggers](./development/debuggers.md)
   - [Performance](./performance.md)
   - [Glossary](./development/glossary.md)

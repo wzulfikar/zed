@@ -44,9 +44,8 @@ impl OpenPathDelegate {
         tx: oneshot::Sender<Option<Vec<PathBuf>>>,
         lister: DirectoryLister,
         creating_path: bool,
-        cx: &App,
+        path_style: PathStyle,
     ) -> Self {
-        let path_style = lister.path_style(cx);
         Self {
             tx: Some(tx),
             lister,
@@ -217,7 +216,8 @@ impl OpenPathPrompt {
         cx: &mut Context<Workspace>,
     ) {
         workspace.toggle_modal(window, cx, |window, cx| {
-            let delegate = OpenPathDelegate::new(tx, lister.clone(), creating_path, cx);
+            let delegate =
+                OpenPathDelegate::new(tx, lister.clone(), creating_path, PathStyle::local());
             let picker = Picker::uniform_list(delegate, window, cx).width(rems(34.));
             let query = lister.default_query(cx);
             picker.set_query(query, window, cx);

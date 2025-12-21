@@ -545,7 +545,7 @@ impl BlockMap {
         {
             let max_point = wrap_snapshot.max_point();
             let edit_start = wrap_snapshot.prev_row_boundary(max_point);
-            let edit_end = max_point.row() + WrapRow(1); // this is end of file
+            let edit_end = max_point.row() + WrapRow(1);
             edits = edits.compose([WrapEdit {
                 old: edit_start..edit_end,
                 new: edit_start..edit_end,
@@ -715,7 +715,6 @@ impl BlockMap {
                         let placement = block.placement.to_wrap_row(wrap_snapshot)?;
                         if let BlockPlacement::Above(row) = placement
                             && row < new_start
-                        // this will be true more often now
                         {
                             return None;
                         }

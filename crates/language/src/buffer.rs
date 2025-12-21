@@ -8,8 +8,8 @@ use crate::{
     outline::OutlineItem,
     row_chunk::RowChunks,
     syntax_map::{
-        MAX_BYTES_TO_QUERY, SyntaxLayer, SyntaxMap, SyntaxMapCapture, SyntaxMapCaptures,
-        SyntaxMapMatch, SyntaxMapMatches, SyntaxSnapshot, ToTreeSitterPoint,
+        SyntaxLayer, SyntaxMap, SyntaxMapCapture, SyntaxMapCaptures, SyntaxMapMatch,
+        SyntaxMapMatches, SyntaxSnapshot, ToTreeSitterPoint,
     },
     task_context::RunnableRange,
     text_diff::text_diff,
@@ -25,7 +25,6 @@ use anyhow::{Context as _, Result};
 use clock::Lamport;
 pub use clock::ReplicaId;
 use collections::{HashMap, HashSet};
-use encoding_rs::Encoding;
 use fs::MTime;
 use futures::channel::oneshot;
 use gpui::{
@@ -132,8 +131,6 @@ pub struct Buffer {
     change_bits: Vec<rc::Weak<Cell<bool>>>,
     _subscriptions: Vec<gpui::Subscription>,
     tree_sitter_data: Arc<TreeSitterData>,
-    encoding: &'static Encoding,
-    has_bom: bool,
 }
 
 #[derive(Debug)]
@@ -427,9 +424,6 @@ pub enum DiskState {
     Present { mtime: MTime },
     /// Deleted file that was previously present.
     Deleted,
-    /// An old version of a file that was previously present
-    /// usually from a version control system. e.g. A git blob
-    Historic { was_deleted: bool },
 }
 
 impl DiskState {
@@ -439,7 +433,6 @@ impl DiskState {
             DiskState::New => None,
             DiskState::Present { mtime } => Some(mtime),
             DiskState::Deleted => None,
-            DiskState::Historic { .. } => None,
         }
     }
 
@@ -448,16 +441,6 @@ impl DiskState {
             DiskState::New => false,
             DiskState::Present { .. } => true,
             DiskState::Deleted => false,
-            DiskState::Historic { .. } => false,
-        }
-    }
-
-    /// Returns true if this state represents a deleted file.
-    pub fn is_deleted(&self) -> bool {
-        match self {
-            DiskState::Deleted => true,
-            DiskState::Historic { was_deleted } => *was_deleted,
-            _ => false,
         }
     }
 }
@@ -1117,8 +1100,6 @@ impl Buffer {
             has_conflict: false,
             change_bits: Default::default(),
             _subscriptions: Vec::new(),
-            encoding: encoding_rs::UTF_8,
-            has_bom: false,
         }
     }
 
@@ -1402,26 +1383,6 @@ impl Buffer {
         self.saved_mtime
     }
 
-    /// Returns the character encoding of the buffer's file.
-    pub fn encoding(&self) -> &'static Encoding {
-        self.encoding
-    }
-
-    /// Sets the character encoding of the buffer.
-    pub fn set_encoding(&mut self, encoding: &'static Encoding) {
-        self.encoding = encoding;
-    }
-
-    /// Returns whether the buffer has a Byte Order Mark.
-    pub fn has_bom(&self) -> bool {
-        self.has_bom
-    }
-
-    /// Sets whether the buffer has a Byte Order Mark.
-    pub fn set_has_bom(&mut self, has_bom: bool) {
-        self.has_bom = has_bom;
-    }
-
     /// Assign a language to the buffer.
     pub fn set_language_async(&mut self, language: Option<Arc<Language>>, cx: &mut Context<Self>) {
         self.set_language_(language, cfg!(any(test, feature = "test-support")), cx);
@@ -1504,23 +1465,19 @@ impl Buffer {
         let (tx, rx) = futures::channel::oneshot::channel();
         let prev_version = self.text.version();
         self.reload_task = Some(cx.spawn(async move |this, cx| {
-            let Some((new_mtime, load_bytes_task, encoding)) = this.update(cx, |this, cx| {
+            let Some((new_mtime, new_text)) = this.update(cx, |this, cx| {
                 let file = this.file.as_ref()?.as_local()?;
-                Some((
-                    file.disk_state().mtime(),
-                    file.load_bytes(cx),
-                    this.encoding,
-                ))
+
+                Some((file.disk_state().mtime(), file.load(cx)))
             })?
             else {
                 return Ok(());
             };
 
-            let bytes = load_bytes_task.await?;
-            let (cow, _encoding_used, _has_errors) = encoding.decode(&bytes);
-            let new_text = cow.into_owned();
-
-            let diff = this.update(cx, |this, cx| this.diff(new_text, cx))?.await;
+            let new_text = new_text.await?;
+            let diff = this
+                .update(cx, |this, cx| this.diff(new_text.clone(), cx))?
+                .await;
             this.update(cx, |this, cx| {
                 if this.version() == diff.base_version {
                     this.finalize_last_transaction();
@@ -1819,7 +1776,9 @@ impl Buffer {
         self.syntax_map.lock().did_parse(syntax_snapshot);
         self.request_autoindent(cx);
         self.parse_status.0.send(ParseStatus::Idle).unwrap();
-        self.invalidate_tree_sitter_data(self.text.snapshot());
+        if self.text.version() != *self.tree_sitter_data.version() {
+            self.invalidate_tree_sitter_data(self.text.snapshot());
+        }
         cx.emit(BufferEvent::Reparsed);
         cx.notify();
     }
@@ -2288,7 +2247,6 @@ impl Buffer {
                 None => true,
             },
             DiskState::Deleted => false,
-            DiskState::Historic { .. } => false,
         }
     }
 
@@ -3258,22 +3216,15 @@ impl BufferSnapshot {
         struct StartPosition {
             start: Point,
             suffix: SharedString,
-            language: Arc<Language>,
         }
 
         // Find the suggested indentation ranges based on the syntax tree.
         let start = Point::new(prev_non_blank_row.unwrap_or(row_range.start), 0);
         let end = Point::new(row_range.end, 0);
         let range = (start..end).to_offset(&self.text);
-        let mut matches = self.syntax.matches_with_options(
-            range.clone(),
-            &self.text,
-            TreeSitterOptions {
-                max_bytes_to_query: Some(MAX_BYTES_TO_QUERY),
-                max_start_depth: None,
-            },
-            |grammar| Some(&grammar.indents_config.as_ref()?.query),
-        );
+        let mut matches = self.syntax.matches(range.clone(), &self.text, |grammar| {
+            Some(&grammar.indents_config.as_ref()?.query)
+        });
         let indent_configs = matches
             .grammars()
             .iter()
@@ -3302,7 +3253,6 @@ impl BufferSnapshot {
                     start_positions.push(StartPosition {
                         start: Point::from_ts_point(capture.node.start_position()),
                         suffix: suffix.clone(),
-                        language: mat.language.clone(),
                     });
                 }
             }
@@ -3353,7 +3303,8 @@ impl BufferSnapshot {
             // set its end to the outdent position
             if let Some(range_to_truncate) = indent_ranges
                 .iter_mut()
-                .rfind(|indent_range| indent_range.contains(&outdent_position))
+                .filter(|indent_range| indent_range.contains(&outdent_position))
+                .next_back()
             {
                 range_to_truncate.end = outdent_position;
             }
@@ -3363,7 +3314,7 @@ impl BufferSnapshot {
 
         // Find the suggested indentation increases and decreased based on regexes.
         let mut regex_outdent_map = HashMap::default();
-        let mut last_seen_suffix: HashMap<String, Vec<StartPosition>> = HashMap::default();
+        let mut last_seen_suffix: HashMap<String, Vec<Point>> = HashMap::default();
         let mut start_positions_iter = start_positions.iter().peekable();
 
         let mut indent_change_rows = Vec::<(u32, Ordering)>::new();
@@ -3371,21 +3322,14 @@ impl BufferSnapshot {
             Point::new(prev_non_blank_row.unwrap_or(row_range.start), 0)
                 ..Point::new(row_range.end, 0),
             |row, line| {
-                let indent_len = self.indent_size_for_line(row).len;
-                let row_language = self.language_at(Point::new(row, indent_len)).cloned();
-                let row_language_config = row_language
-                    .as_ref()
-                    .map(|lang| lang.config())
-                    .unwrap_or(config);
-
-                if row_language_config
+                if config
                     .decrease_indent_pattern
                     .as_ref()
                     .is_some_and(|regex| regex.is_match(line))
                 {
                     indent_change_rows.push((row, Ordering::Less));
                 }
-                if row_language_config
+                if config
                     .increase_indent_pattern
                     .as_ref()
                     .is_some_and(|regex| regex.is_match(line))
@@ -3394,16 +3338,16 @@ impl BufferSnapshot {
                 }
                 while let Some(pos) = start_positions_iter.peek() {
                     if pos.start.row < row {
-                        let pos = start_positions_iter.next().unwrap().clone();
+                        let pos = start_positions_iter.next().unwrap();
                         last_seen_suffix
                             .entry(pos.suffix.to_string())
                             .or_default()
-                            .push(pos);
+                            .push(pos.start);
                     } else {
                         break;
                     }
                 }
-                for rule in &row_language_config.decrease_indent_patterns {
+                for rule in &config.decrease_indent_patterns {
                     if rule.pattern.as_ref().is_some_and(|r| r.is_match(line)) {
                         let row_start_column = self.indent_size_for_line(row).len;
                         let basis_row = rule
@@ -3411,16 +3355,10 @@ impl BufferSnapshot {
                             .iter()
                             .filter_map(|valid_suffix| last_seen_suffix.get(valid_suffix))
                             .flatten()
-                            .filter(|pos| {
-                                row_language
-                                    .as_ref()
-                                    .or(self.language.as_ref())
-                                    .is_some_and(|lang| Arc::ptr_eq(lang, &pos.language))
-                            })
-                            .filter(|pos| pos.start.column <= row_start_column)
-                            .max_by_key(|pos| pos.start.row);
-                        if let Some(outdent_to) = basis_row {
-                            regex_outdent_map.insert(row, outdent_to.start.row);
+                            .filter(|start_point| start_point.column <= row_start_column)
+                            .max_by_key(|start_point| start_point.row);
+                        if let Some(outdent_to_row) = basis_row {
+                            regex_outdent_map.insert(row, outdent_to_row.row);
                         }
                         break;
                     }
@@ -4379,12 +4317,14 @@ impl BufferSnapshot {
         for chunk in self
             .tree_sitter_data
             .chunks
-            .applicable_chunks(&[range.to_point(self)])
+            .applicable_chunks(&[self.anchor_before(range.start)..self.anchor_after(range.end)])
         {
             if known_chunks.is_some_and(|chunks| chunks.contains(&chunk.row_range())) {
                 continue;
             }
-            let chunk_range = chunk.anchor_range();
+            let Some(chunk_range) = self.tree_sitter_data.chunks.chunk_range(chunk) else {
+                continue;
+            };
             let chunk_range = chunk_range.to_offset(&self);
 
             if let Some(cached_brackets) =
@@ -4398,15 +4338,11 @@ impl BufferSnapshot {
             let mut opens = Vec::new();
             let mut color_pairs = Vec::new();
 
-            let mut matches = self.syntax.matches_with_options(
-                chunk_range.clone(),
-                &self.text,
-                TreeSitterOptions {
-                    max_bytes_to_query: Some(MAX_BYTES_TO_QUERY),
-                    max_start_depth: None,
-                },
-                |grammar| grammar.brackets_config.as_ref().map(|c| &c.query),
-            );
+            let mut matches = self
+                .syntax
+                .matches(chunk_range.clone(), &self.text, |grammar| {
+                    grammar.brackets_config.as_ref().map(|c| &c.query)
+                });
             let configs = matches
                 .grammars()
                 .iter()

@@ -113,7 +113,6 @@ jobs:
         delete-branch: true
         token: ${{ steps.generate-token.outputs.token }}
         sign-commits: true
-        assignees: ${{ github.actor }}
     timeout-minutes: 1
   create_version_label:
     needs:

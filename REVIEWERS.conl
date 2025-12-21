@@ -28,7 +28,7 @@ ai
   = @rtfeldman
 
 audio
-  = @yara-blue
+  = @dvdsk
 
 crashes
   = @p1n3appl3
@@ -53,7 +53,7 @@ extension
 git
   = @cole-miller
   = @danilo-leal
-  = @yara-blue
+  = @dvdsk
   = @kubkon
   = @Anthony-Eid
   = @cameron1024
@@ -76,7 +76,7 @@ languages
 
 linux
   = @cole-miller
-  = @yara-blue
+  = @dvdsk
   = @p1n3appl3
   = @probably-neb
   = @smitbarmase
@@ -92,7 +92,7 @@ multi_buffer
   = @SomeoneToIgnore
 
 pickers
-  = @yara-blue
+  = @dvdsk
   = @p1n3appl3
   = @SomeoneToIgnore
 

@@ -75,16 +75,6 @@ actions!(
         OpenSelectedEntry,
         /// Reveals the selected item in the system file manager.
         RevealInFileManager,
-        /// Scroll half a page upwards
-        ScrollUp,
-        /// Scroll half a page downwards
-        ScrollDown,
-        /// Scroll until the cursor displays at the center
-        ScrollCursorCenter,
-        /// Scroll until the cursor displays at the top
-        ScrollCursorTop,
-        /// Scroll until the cursor displays at the bottom
-        ScrollCursorBottom,
         /// Selects the parent of the current entry.
         SelectParent,
         /// Toggles the pin status of the active editor.
@@ -110,7 +100,6 @@ pub struct OutlinePanel {
     active: bool,
     pinned: bool,
     scroll_handle: UniformListScrollHandle,
-    rendered_entries_len: usize,
     context_menu: Option<(Entity<ContextMenu>, Point<Pixels>, Subscription)>,
     focus_handle: FocusHandle,
     pending_serialization: Task<Option<()>>,
@@ -850,7 +839,6 @@ impl OutlinePanel {
                 fs: workspace.app_state().fs.clone(),
                 max_width_item_index: None,
                 scroll_handle,
-                rendered_entries_len: 0,
                 focus_handle,
                 filter_editor,
                 fs_entries: Vec::new(),
@@ -998,9 +986,9 @@ impl OutlinePanel {
 
     fn cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
         if self.filter_editor.focus_handle(cx).is_focused(window) {
-            self.focus_handle.focus(window, cx);
+            self.focus_handle.focus(window);
         } else {
-            self.filter_editor.focus_handle(cx).focus(window, cx);
+            self.filter_editor.focus_handle(cx).focus(window);
         }
 
         if self.context_menu.is_some() {
@@ -1153,74 +1141,10 @@ impl OutlinePanel {
                 }
 
                 if change_focus {
-                    active_editor.focus_handle(cx).focus(window, cx);
+                    active_editor.focus_handle(cx).focus(window);
                 } else {
-                    self.focus_handle.focus(window, cx);
+                    self.focus_handle.focus(window);
                 }
-            }
-        }
-    }
-
-    fn scroll_up(&mut self, _: &ScrollUp, window: &mut Window, cx: &mut Context<Self>) {
-        for _ in 0..self.rendered_entries_len / 2 {
-            window.dispatch_action(SelectPrevious.boxed_clone(), cx);
-        }
-    }
-
-    fn scroll_down(&mut self, _: &ScrollDown, window: &mut Window, cx: &mut Context<Self>) {
-        for _ in 0..self.rendered_entries_len / 2 {
-            window.dispatch_action(SelectNext.boxed_clone(), cx);
-        }
-    }
-
-    fn scroll_cursor_center(
-        &mut self,
-        _: &ScrollCursorCenter,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if let Some(selected_entry) = self.selected_entry() {
-            let index = self
-                .cached_entries
-                .iter()
-                .position(|cached_entry| &cached_entry.entry == selected_entry);
-            if let Some(index) = index {
-                self.scroll_handle
-                    .scroll_to_item_strict(index, ScrollStrategy::Center);
-                cx.notify();
-            }
-        }
-    }
-
-    fn scroll_cursor_top(&mut self, _: &ScrollCursorTop, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(selected_entry) = self.selected_entry() {
-            let index = self
-                .cached_entries
-                .iter()
-                .position(|cached_entry| &cached_entry.entry == selected_entry);
-            if let Some(index) = index {
-                self.scroll_handle
-                    .scroll_to_item_strict(index, ScrollStrategy::Top);
-                cx.notify();
-            }
-        }
-    }
-
-    fn scroll_cursor_bottom(
-        &mut self,
-        _: &ScrollCursorBottom,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if let Some(selected_entry) = self.selected_entry() {
-            let index = self
-                .cached_entries
-                .iter()
-                .position(|cached_entry| &cached_entry.entry == selected_entry);
-            if let Some(index) = index {
-                self.scroll_handle
-                    .scroll_to_item_strict(index, ScrollStrategy::Bottom);
-                cx.notify();
             }
         }
     }
@@ -1458,7 +1382,7 @@ impl OutlinePanel {
                     Box::new(zed_actions::workspace::CopyRelativePath),
                 )
         });
-        window.focus(&context_menu.focus_handle(cx), cx);
+        window.focus(&context_menu.focus_handle(cx));
         let subscription = cx.subscribe(&context_menu, |outline_panel, _, _: &DismissEvent, cx| {
             outline_panel.context_menu.take();
             cx.notify();
@@ -2686,7 +2610,7 @@ impl OutlinePanel {
             })
             .when(
                 is_active && self.focus_handle.contains_focused(window, cx),
-                |div| div.border_color(cx.theme().colors().panel_focused_border),
+                |div| div.border_color(Color::Selected.color(cx)),
             )
     }
 
@@ -4539,7 +4463,7 @@ impl OutlinePanel {
         cx: &mut Context<Self>,
     ) {
         if focus {
-            self.focus_handle.focus(window, cx);
+            self.focus_handle.focus(window);
         }
         let ix = self
             .cached_entries
@@ -4654,7 +4578,6 @@ impl OutlinePanel {
                     "entries",
                     items_len,
                     cx.processor(move |outline_panel, range: Range<usize>, window, cx| {
-                        outline_panel.rendered_entries_len = range.end - range.start;
                         let entries = outline_panel.cached_entries.get(range);
                         entries
                             .map(|entries| entries.to_vec())
@@ -5047,12 +4970,7 @@ impl Render for OutlinePanel {
             .key_context(self.dispatch_context(window, cx))
             .on_action(cx.listener(Self::open_selected_entry))
             .on_action(cx.listener(Self::cancel))
-            .on_action(cx.listener(Self::scroll_up))
-            .on_action(cx.listener(Self::scroll_down))
             .on_action(cx.listener(Self::select_next))
-            .on_action(cx.listener(Self::scroll_cursor_center))
-            .on_action(cx.listener(Self::scroll_cursor_top))
-            .on_action(cx.listener(Self::scroll_cursor_bottom))
             .on_action(cx.listener(Self::select_previous))
             .on_action(cx.listener(Self::select_first))
             .on_action(cx.listener(Self::select_last))

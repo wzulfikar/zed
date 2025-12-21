@@ -376,8 +376,6 @@ impl LocalBufferStore {
 
         let text = buffer.as_rope().clone();
         let line_ending = buffer.line_ending();
-        let encoding = buffer.encoding();
-        let has_bom = buffer.has_bom();
         let version = buffer.version();
         let buffer_id = buffer.remote_id();
         let file = buffer.file().cloned();
@@ -389,7 +387,7 @@ impl LocalBufferStore {
         }
 
         let save = worktree.update(cx, |worktree, cx| {
-            worktree.write_file(path, text, line_ending, encoding, has_bom, cx)
+            worktree.write_file(path, text, line_ending, cx)
         });
 
         cx.spawn(async move |this, cx| {
@@ -632,11 +630,7 @@ impl LocalBufferStore {
                         })
                         .await;
                     cx.insert_entity(reservation, |_| {
-                        let mut buffer =
-                            Buffer::build(text_buffer, Some(loaded.file), Capability::ReadWrite);
-                        buffer.set_encoding(loaded.encoding);
-                        buffer.set_has_bom(loaded.has_bom);
-                        buffer
+                        Buffer::build(text_buffer, Some(loaded.file), Capability::ReadWrite)
                     })?
                 }
                 Err(error) if is_not_found_error(&error) => cx.new(|cx| {

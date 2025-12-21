@@ -310,8 +310,6 @@ messages!(
     (GitCreateBranch, Background),
     (GitChangeBranch, Background),
     (GitRenameBranch, Background),
-    (TrustWorktrees, Background),
-    (RestrictWorktrees, Background),
     (CheckForPushedCommits, Background),
     (CheckForPushedCommitsResponse, Background),
     (GitDiff, Background),
@@ -531,9 +529,7 @@ request_messages!(
     (GetAgentServerCommand, AgentServerCommand),
     (RemoteStarted, Ack),
     (GitGetWorktrees, GitWorktreesResponse),
-    (GitCreateWorktree, Ack),
-    (TrustWorktrees, Ack),
-    (RestrictWorktrees, Ack),
+    (GitCreateWorktree, Ack)
 );
 
 lsp_messages!(
@@ -706,9 +702,7 @@ entity_messages!(
     ExternalAgentLoadingStatusUpdated,
     NewExternalAgentVersionAvailable,
     GitGetWorktrees,
-    GitCreateWorktree,
-    TrustWorktrees,
-    RestrictWorktrees,
+    GitCreateWorktree
 );
 
 entity_messages!(

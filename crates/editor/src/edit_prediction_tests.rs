@@ -485,6 +485,15 @@ impl EditPredictionDelegate for FakeEditPredictionDelegate {
     ) {
     }
 
+    fn cycle(
+        &mut self,
+        _buffer: gpui::Entity<language::Buffer>,
+        _cursor_position: language::Anchor,
+        _direction: edit_prediction_types::Direction,
+        _cx: &mut gpui::Context<Self>,
+    ) {
+    }
+
     fn accept(&mut self, _cx: &mut gpui::Context<Self>) {}
 
     fn discard(&mut self, _cx: &mut gpui::Context<Self>) {}
@@ -548,6 +557,15 @@ impl EditPredictionDelegate for FakeNonZedEditPredictionDelegate {
         _buffer: gpui::Entity<language::Buffer>,
         _cursor_position: language::Anchor,
         _debounce: bool,
+        _cx: &mut gpui::Context<Self>,
+    ) {
+    }
+
+    fn cycle(
+        &mut self,
+        _buffer: gpui::Entity<language::Buffer>,
+        _cursor_position: language::Anchor,
+        _direction: edit_prediction_types::Direction,
         _cx: &mut gpui::Context<Self>,
     ) {
     }

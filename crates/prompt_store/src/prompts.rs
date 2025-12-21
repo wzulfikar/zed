@@ -20,18 +20,6 @@ use util::{
 
 use crate::UserPromptId;
 
-pub const RULES_FILE_NAMES: &[&str] = &[
-    ".rules",
-    ".cursorrules",
-    ".windsurfrules",
-    ".clinerules",
-    ".github/copilot-instructions.md",
-    "CLAUDE.md",
-    "AGENT.md",
-    "AGENTS.md",
-    "GEMINI.md",
-];
-
 #[derive(Default, Debug, Clone, Serialize)]
 pub struct ProjectContext {
     pub worktrees: Vec<WorktreeContext>,
@@ -112,7 +100,7 @@ pub struct ContentPromptContextV2 {
     pub language_name: Option<String>,
     pub is_truncated: bool,
     pub document_content: String,
-    pub rewrite_section: String,
+    pub rewrite_section: Option<String>,
     pub diagnostic_errors: Vec<ContentPromptDiagnosticContext>,
 }
 
@@ -310,6 +298,7 @@ impl PromptBuilder {
         };
 
         const MAX_CTX: usize = 50000;
+        let is_insert = range.is_empty();
         let mut is_truncated = false;
 
         let before_range = 0..range.start;
@@ -334,19 +323,28 @@ impl PromptBuilder {
         for chunk in buffer.text_for_range(truncated_before) {
             document_content.push_str(chunk);
         }
-
-        document_content.push_str("<rewrite_this>\n");
-        for chunk in buffer.text_for_range(range.clone()) {
-            document_content.push_str(chunk);
+        if is_insert {
+            document_content.push_str("<insert_here></insert_here>");
+        } else {
+            document_content.push_str("<rewrite_this>\n");
+            for chunk in buffer.text_for_range(range.clone()) {
+                document_content.push_str(chunk);
+            }
+            document_content.push_str("\n</rewrite_this>");
         }
-        document_content.push_str("\n</rewrite_this>");
-
         for chunk in buffer.text_for_range(truncated_after) {
             document_content.push_str(chunk);
         }
 
-        let rewrite_section: String = buffer.text_for_range(range.clone()).collect();
-
+        let rewrite_section = if !is_insert {
+            let mut section = String::new();
+            for chunk in buffer.text_for_range(range.clone()) {
+                section.push_str(chunk);
+            }
+            Some(section)
+        } else {
+            None
+        };
         let diagnostics = buffer.diagnostics_in_range::<_, Point>(range, false);
         let diagnostic_errors: Vec<ContentPromptDiagnosticContext> = diagnostics
             .map(|entry| {

@@ -1,7 +1,12 @@
-use gpui::{Action, Entity, OwnedMenu, OwnedMenuItem, actions};
+use gpui::{Entity, OwnedMenu, OwnedMenuItem};
 use settings::Settings;
 
+#[cfg(not(target_os = "macos"))]
+use gpui::{Action, actions};
+
+#[cfg(not(target_os = "macos"))]
 use schemars::JsonSchema;
+#[cfg(not(target_os = "macos"))]
 use serde::Deserialize;
 
 use smallvec::SmallVec;
@@ -9,23 +14,18 @@ use ui::{ContextMenu, PopoverMenu, PopoverMenuHandle, Tooltip, prelude::*};
 
 use crate::title_bar_settings::TitleBarSettings;
 
+#[cfg(not(target_os = "macos"))]
 actions!(
     app_menu,
     [
-        /// Activates the menu on the right in the client-side application menu.
-        ///
-        /// Does not apply to platform menu bars (e.g. on macOS).
+        /// Navigates to the menu item on the right.
         ActivateMenuRight,
-        /// Activates the menu on the left in the client-side application menu.
-        ///
-        /// Does not apply to platform menu bars (e.g. on macOS).
+        /// Navigates to the menu item on the left.
         ActivateMenuLeft
     ]
 );
 
-/// Opens the named menu in the client-side application menu.
-///
-/// Does not apply to platform menu bars (e.g. on macOS).
+#[cfg(not(target_os = "macos"))]
 #[derive(Clone, Deserialize, JsonSchema, PartialEq, Default, Action)]
 #[action(namespace = app_menu)]
 pub struct OpenApplicationMenu(String);

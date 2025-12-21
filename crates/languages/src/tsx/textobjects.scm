@@ -18,47 +18,13 @@
         (_)* @function.inside
         "}")) @function.around
 
-((arrow_function
+(arrow_function
     body: (statement_block
         "{"
         (_)* @function.inside
         "}")) @function.around
- (#not-has-parent? @function.around variable_declarator))
 
-; Arrow function in variable declaration - capture the full declaration
-([
-    (lexical_declaration
-        (variable_declarator
-            value: (arrow_function
-                body: (statement_block
-                    "{"
-                    (_)* @function.inside
-                    "}"))))
-    (variable_declaration
-        (variable_declarator
-            value: (arrow_function
-                body: (statement_block
-                    "{"
-                    (_)* @function.inside
-                    "}"))))
-]) @function.around
-
-; Arrow function in variable declaration (expression body fallback)
-([
-    (lexical_declaration
-        (variable_declarator
-            value: (arrow_function
-                body: (_) @function.inside)))
-    (variable_declaration
-        (variable_declarator
-            value: (arrow_function
-                body: (_) @function.inside)))
-]) @function.around
-
-; Catch-all for arrow functions in other contexts (callbacks, etc.)
-((arrow_function
-    body: (_) @function.inside) @function.around
- (#not-has-parent? @function.around variable_declarator))
+(arrow_function) @function.around
 (function_signature) @function.around
 
 (generator_function

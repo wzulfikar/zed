@@ -89,7 +89,6 @@ pub struct LanguageServer {
     outbound_tx: channel::Sender<String>,
     notification_tx: channel::Sender<NotificationSerializer>,
     name: LanguageServerName,
-    version: Option<SharedString>,
     process_name: Arc<str>,
     binary: LanguageServerBinary,
     capabilities: RwLock<ServerCapabilities>,
@@ -502,7 +501,6 @@ impl LanguageServer {
             response_handlers,
             io_handlers,
             name: server_name,
-            version: None,
             process_name: binary
                 .path
                 .file_name()
@@ -884,9 +882,7 @@ impl LanguageServer {
                 window: Some(WindowClientCapabilities {
                     work_done_progress: Some(true),
                     show_message: Some(ShowMessageRequestClientCapabilities {
-                        message_action_item: Some(MessageActionItemCapabilities {
-                            additional_properties_support: Some(true),
-                        }),
+                        message_action_item: None,
                     }),
                     ..WindowClientCapabilities::default()
                 }),
@@ -927,7 +923,6 @@ impl LanguageServer {
                     )
                 })?;
             if let Some(info) = response.server_info {
-                self.version = info.version.map(SharedString::from);
                 self.process_name = info.name.into();
             }
             self.capabilities = RwLock::new(response.capabilities);
@@ -1156,11 +1151,6 @@ impl LanguageServer {
     /// Get the name of the running language server.
     pub fn name(&self) -> LanguageServerName {
         self.name.clone()
-    }
-
-    /// Get the version of the running language server.
-    pub fn version(&self) -> Option<SharedString> {
-        self.version.clone()
     }
 
     pub fn process_name(&self) -> &str {

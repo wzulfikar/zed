@@ -5,7 +5,6 @@ mod display;
 mod display_link;
 mod events;
 mod keyboard;
-mod pasteboard;
 
 #[cfg(feature = "screen-capture")]
 mod screen_capture;
@@ -21,6 +20,8 @@ use metal_renderer as renderer;
 
 #[cfg(feature = "macos-blade")]
 use crate::platform::blade as renderer;
+
+mod attributed_string;
 
 #[cfg(feature = "font-kit")]
 mod open_type;
@@ -134,8 +135,6 @@ unsafe impl objc::Encode for NSRange {
     }
 }
 
-/// Allow NSString::alloc use here because it sets autorelease
-#[allow(clippy::disallowed_methods)]
 unsafe fn ns_string(string: &str) -> id {
     unsafe { NSString::alloc(nil).init_str(string).autorelease() }
 }

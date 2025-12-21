@@ -42,11 +42,6 @@ impl SharedScreen {
         })
         .detach();
 
-        cx.observe_release(&room, |_, _, cx| {
-            cx.emit(Event::Close);
-        })
-        .detach();
-
         let view = cx.new(|cx| RemoteVideoTrackView::new(track.clone(), window, cx));
         cx.subscribe(&view, |_, _, ev, cx| match ev {
             call::RemoteVideoTrackViewEvent::Close => cx.emit(Event::Close),

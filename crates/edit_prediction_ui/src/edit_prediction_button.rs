@@ -46,9 +46,7 @@ use workspace::{
 };
 use zed_actions::{OpenBrowser, OpenSettingsAt};
 
-use crate::{
-    CaptureExample, RatePredictions, rate_prediction_modal::PredictEditsRatePredictionsFeatureFlag,
-};
+use crate::{RatePredictions, rate_prediction_modal::PredictEditsRatePredictionsFeatureFlag};
 
 actions!(
     edit_prediction,
@@ -487,21 +485,6 @@ impl EditPredictionButton {
         cx.observe_global::<SettingsStore>(move |_, cx| cx.notify())
             .detach();
 
-        cx.observe_global::<EditPredictionStore>(move |_, cx| cx.notify())
-            .detach();
-
-        let sweep_api_token_task = edit_prediction::sweep_ai::load_sweep_api_token(cx);
-        let mercury_api_token_task = edit_prediction::mercury::load_mercury_api_token(cx);
-
-        cx.spawn(async move |this, cx| {
-            _ = futures::join!(sweep_api_token_task, mercury_api_token_task);
-            this.update(cx, |_, cx| {
-                cx.notify();
-            })
-            .ok();
-        })
-        .detach();
-
         CodestralEditPredictionDelegate::ensure_api_key_loaded(client.http_client(), cx);
 
         Self {
@@ -518,7 +501,7 @@ impl EditPredictionButton {
         }
     }
 
-    fn get_available_providers(&self, cx: &mut App) -> Vec<EditPredictionProvider> {
+    fn get_available_providers(&self, cx: &App) -> Vec<EditPredictionProvider> {
         let mut providers = Vec::new();
 
         providers.push(EditPredictionProvider::Zed);
@@ -547,10 +530,12 @@ impl EditPredictionButton {
             providers.push(EditPredictionProvider::Codestral);
         }
 
+        let ep_store = EditPredictionStore::try_global(cx);
+
         if cx.has_flag::<SweepFeatureFlag>()
-            && edit_prediction::sweep_ai::sweep_api_token(cx)
-                .read(cx)
-                .has_key()
+            && ep_store
+                .as_ref()
+                .is_some_and(|ep_store| ep_store.read(cx).has_sweep_api_token(cx))
         {
             providers.push(EditPredictionProvider::Experimental(
                 EXPERIMENTAL_SWEEP_EDIT_PREDICTION_PROVIDER_NAME,
@@ -558,9 +543,9 @@ impl EditPredictionButton {
         }
 
         if cx.has_flag::<MercuryFeatureFlag>()
-            && edit_prediction::mercury::mercury_api_token(cx)
-                .read(cx)
-                .has_key()
+            && ep_store
+                .as_ref()
+                .is_some_and(|ep_store| ep_store.read(cx).has_mercury_api_token(cx))
         {
             providers.push(EditPredictionProvider::Experimental(
                 EXPERIMENTAL_MERCURY_EDIT_PREDICTION_PROVIDER_NAME,
@@ -914,13 +899,7 @@ impl EditPredictionButton {
                 .context(editor_focus_handle)
                 .when(
                     cx.has_flag::<PredictEditsRatePredictionsFeatureFlag>(),
-                    |this| {
-                        this.action(
-                            "Capture Edit Prediction Example",
-                            CaptureExample.boxed_clone(),
-                        )
-                        .action("Rate Predictions", RatePredictions.boxed_clone())
-                    },
+                    |this| this.action("Rate Predictions", RatePredictions.boxed_clone()),
                 );
         }
 

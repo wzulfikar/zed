@@ -216,10 +216,14 @@ impl HistoryStore {
     }
 
     pub fn reload(&self, cx: &mut Context<Self>) {
-        let database_connection = ThreadsDatabase::connect(cx);
+        let database_future = ThreadsDatabase::connect(cx);
         cx.spawn(async move |this, cx| {
-            let database = database_connection.await;
-            let threads = database.map_err(|err| anyhow!(err))?.list_threads().await?;
+            let threads = database_future
+                .await
+                .map_err(|err| anyhow!(err))?
+                .list_threads()
+                .await?;
+
             this.update(cx, |this, cx| {
                 if this.recently_opened_entries.len() < MAX_RECENTLY_OPENED_ENTRIES {
                     for thread in threads
@@ -340,8 +344,7 @@ impl HistoryStore {
     fn load_recently_opened_entries(cx: &AsyncApp) -> Task<Result<VecDeque<HistoryEntryId>>> {
         cx.background_spawn(async move {
             if cfg!(any(feature = "test-support", test)) {
-                log::warn!("history store does not persist in tests");
-                return Ok(VecDeque::new());
+                anyhow::bail!("history store does not persist in tests");
             }
             let json = KEY_VALUE_STORE
                 .read_kvp(RECENTLY_OPENED_THREADS_KEY)?

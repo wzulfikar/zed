@@ -1,10 +1,9 @@
-use super::ns_string;
 use crate::{Bounds, DisplayId, Pixels, PlatformDisplay, point, px, size};
 use anyhow::Result;
 use cocoa::{
     appkit::NSScreen,
     base::{id, nil},
-    foundation::{NSArray, NSDictionary},
+    foundation::{NSArray, NSDictionary, NSString},
 };
 use core_foundation::uuid::{CFUUIDGetUUIDBytes, CFUUIDRef};
 use core_graphics::display::{CGDirectDisplayID, CGDisplayBounds, CGGetActiveDisplayList};
@@ -36,7 +35,7 @@ impl MacDisplay {
             let screens = NSScreen::screens(nil);
             let screen = cocoa::foundation::NSArray::objectAtIndex(screens, 0);
             let device_description = NSScreen::deviceDescription(screen);
-            let screen_number_key: id = ns_string("NSScreenNumber");
+            let screen_number_key: id = NSString::alloc(nil).init_str("NSScreenNumber");
             let screen_number = device_description.objectForKey_(screen_number_key);
             let screen_number: CGDirectDisplayID = msg_send![screen_number, unsignedIntegerValue];
             Self(screen_number)
@@ -151,7 +150,7 @@ impl MacDisplay {
     unsafe fn get_nsscreen(&self) -> id {
         let screens = unsafe { NSScreen::screens(nil) };
         let count = unsafe { NSArray::count(screens) };
-        let screen_number_key: id = unsafe { ns_string("NSScreenNumber") };
+        let screen_number_key: id = unsafe { NSString::alloc(nil).init_str("NSScreenNumber") };
 
         for i in 0..count {
             let screen = unsafe { NSArray::objectAtIndex(screens, i) };

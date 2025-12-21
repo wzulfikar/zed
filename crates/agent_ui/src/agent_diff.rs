@@ -17,7 +17,7 @@ use gpui::{
     Global, SharedString, Subscription, Task, WeakEntity, Window, prelude::*,
 };
 
-use language::{Buffer, Capability, OffsetRangeExt, Point};
+use language::{Buffer, Capability, DiskState, OffsetRangeExt, Point};
 use multi_buffer::PathKey;
 use project::{Project, ProjectItem, ProjectPath};
 use settings::{Settings, SettingsStore};
@@ -130,12 +130,7 @@ impl AgentDiffPane {
             .action_log()
             .read(cx)
             .changed_buffers(cx);
-        let mut paths_to_delete = self
-            .multibuffer
-            .read(cx)
-            .paths()
-            .cloned()
-            .collect::<HashSet<_>>();
+        let mut paths_to_delete = self.multibuffer.read(cx).paths().collect::<HashSet<_>>();
 
         for (buffer, diff_handle) in changed_buffers {
             if buffer.read(cx).file().is_none() {
@@ -192,7 +187,7 @@ impl AgentDiffPane {
                     && buffer
                         .read(cx)
                         .file()
-                        .is_some_and(|file| file.disk_state().is_deleted())
+                        .is_some_and(|file| file.disk_state() == DiskState::Deleted)
                 {
                     editor.fold_buffer(snapshot.text.remote_id(), cx)
                 }
@@ -212,10 +207,10 @@ impl AgentDiffPane {
                 .focus_handle(cx)
                 .contains_focused(window, cx)
         {
-            self.focus_handle.focus(window, cx);
+            self.focus_handle.focus(window);
         } else if self.focus_handle.is_focused(window) && !self.multibuffer.read(cx).is_empty() {
             self.editor.update(cx, |editor, cx| {
-                editor.focus_handle(cx).focus(window, cx);
+                editor.focus_handle(cx).focus(window);
             });
         }
     }
@@ -874,12 +869,12 @@ impl AgentDiffToolbar {
         match active_item {
             AgentDiffToolbarItem::Pane(agent_diff) => {
                 if let Some(agent_diff) = agent_diff.upgrade() {
-                    agent_diff.focus_handle(cx).focus(window, cx);
+                    agent_diff.focus_handle(cx).focus(window);
                 }
             }
             AgentDiffToolbarItem::Editor { editor, .. } => {
                 if let Some(editor) = editor.upgrade() {
-                    editor.read(cx).focus_handle(cx).focus(window, cx);
+                    editor.read(cx).focus_handle(cx).focus(window);
                 }
             }
         }

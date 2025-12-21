@@ -2,11 +2,10 @@ use crate::{
     ActiveTooltip, AnyView, App, Bounds, DispatchPhase, Element, ElementId, GlobalElementId,
     HighlightStyle, Hitbox, HitboxBehavior, InspectorElementId, IntoElement, LayoutId,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, Size, TextOverflow,
-    TextRun, TextStyle, TooltipId, TruncateFrom, WhiteSpace, Window, WrappedLine,
-    WrappedLineLayout, register_tooltip_mouse_handlers, set_tooltip_on_window,
+    TextRun, TextStyle, TooltipId, WhiteSpace, Window, WrappedLine, WrappedLineLayout,
+    register_tooltip_mouse_handlers, set_tooltip_on_window,
 };
 use anyhow::Context as _;
-use itertools::Itertools;
 use smallvec::SmallVec;
 use std::{
     borrow::Cow,
@@ -354,7 +353,7 @@ impl TextLayout {
                     None
                 };
 
-                let (truncate_width, truncation_affix, truncate_from) =
+                let (truncate_width, truncation_suffix) =
                     if let Some(text_overflow) = text_style.text_overflow.clone() {
                         let width = known_dimensions.width.or(match available_space.width {
                             crate::AvailableSpace::Definite(x) => match text_style.line_clamp {
@@ -365,24 +364,17 @@ impl TextLayout {
                         });
 
                         match text_overflow {
-                            TextOverflow::Truncate(s) => (width, s, TruncateFrom::End),
-                            TextOverflow::TruncateStart(s) => (width, s, TruncateFrom::Start),
+                            TextOverflow::Truncate(s) => (width, s),
                         }
                     } else {
-                        (None, "".into(), TruncateFrom::End)
+                        (None, "".into())
                     };
 
-                // Only use cached layout if:
-                // 1. We have a cached size
-                // 2. wrap_width matches (or both are None)
-                // 3. truncate_width is None (if truncate_width is Some, we need to re-layout
-                //    because the previous layout may have been computed without truncation)
                 if let Some(text_layout) = element_state.0.borrow().as_ref()
-                    && let Some(size) = text_layout.size
+                    && text_layout.size.is_some()
                     && (wrap_width.is_none() || wrap_width == text_layout.wrap_width)
-                    && truncate_width.is_none()
                 {
-                    return size;
+                    return text_layout.size.unwrap();
                 }
 
                 let mut line_wrapper = cx.text_system().line_wrapper(text_style.font(), font_size);
@@ -390,9 +382,8 @@ impl TextLayout {
                     line_wrapper.truncate_line(
                         text.clone(),
                         truncate_width,
-                        &truncation_affix,
+                        &truncation_suffix,
                         &runs,
-                        truncate_from,
                     )
                 } else {
                     (text.clone(), Cow::Borrowed(&*runs))
@@ -606,14 +597,14 @@ impl TextLayout {
             .unwrap()
             .lines
             .iter()
-            .map(|s| &s.text)
+            .map(|s| s.text.to_string())
+            .collect::<Vec<_>>()
             .join("\n")
     }
 
     /// The text for this layout (with soft-wraps as newlines)
     pub fn wrapped_text(&self) -> String {
-        let mut accumulator = String::new();
-
+        let mut lines = Vec::new();
         for wrapped in self.0.borrow().as_ref().unwrap().lines.iter() {
             let mut seen = 0;
             for boundary in wrapped.layout.wrap_boundaries.iter() {
@@ -621,16 +612,13 @@ impl TextLayout {
                     [boundary.glyph_ix]
                     .index;
 
-                accumulator.push_str(&wrapped.text[seen..index]);
-                accumulator.push('\n');
+                lines.push(wrapped.text[seen..index].to_string());
                 seen = index;
             }
-            accumulator.push_str(&wrapped.text[seen..]);
-            accumulator.push('\n');
+            lines.push(wrapped.text[seen..].to_string());
         }
-        // Remove trailing newline
-        accumulator.pop();
-        accumulator
+
+        lines.join("\n")
     }
 }
 

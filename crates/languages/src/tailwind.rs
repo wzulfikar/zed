@@ -6,7 +6,6 @@ use language::{LanguageName, LspAdapter, LspAdapterDelegate, LspInstaller, Toolc
 use lsp::{LanguageServerBinary, LanguageServerName, Uri};
 use node_runtime::{NodeRuntime, VersionStrategy};
 use project::lsp_store::language_server_settings;
-use semver::Version;
 use serde_json::{Value, json};
 use std::{
     ffi::OsString,
@@ -40,14 +39,14 @@ impl TailwindLspAdapter {
 }
 
 impl LspInstaller for TailwindLspAdapter {
-    type BinaryVersion = Version;
+    type BinaryVersion = String;
 
     async fn fetch_latest_server_version(
         &self,
         _: &dyn LspAdapterDelegate,
         _: bool,
         _: &mut AsyncApp,
-    ) -> Result<Self::BinaryVersion> {
+    ) -> Result<String> {
         self.node
             .npm_package_latest_version(Self::PACKAGE_NAME)
             .await
@@ -71,12 +70,11 @@ impl LspInstaller for TailwindLspAdapter {
 
     async fn fetch_server_binary(
         &self,
-        latest_version: Self::BinaryVersion,
+        latest_version: String,
         container_dir: PathBuf,
         _: &dyn LspAdapterDelegate,
     ) -> Result<LanguageServerBinary> {
         let server_path = container_dir.join(SERVER_PATH);
-        let latest_version = latest_version.to_string();
 
         self.node
             .npm_install_packages(
@@ -94,7 +92,7 @@ impl LspInstaller for TailwindLspAdapter {
 
     async fn check_if_version_installed(
         &self,
-        version: &Self::BinaryVersion,
+        version: &String,
         container_dir: &PathBuf,
         _: &dyn LspAdapterDelegate,
     ) -> Option<LanguageServerBinary> {

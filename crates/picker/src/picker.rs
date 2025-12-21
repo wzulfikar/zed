@@ -384,7 +384,7 @@ impl<D: PickerDelegate> Picker<D> {
     }
 
     pub fn focus(&self, window: &mut Window, cx: &mut App) {
-        self.focus_handle(cx).focus(window, cx);
+        self.focus_handle(cx).focus(window);
     }
 
     /// Handles the selecting an index, and passing the change to the delegate.

@@ -2,8 +2,6 @@ use crate::HeadlessProject;
 use crate::headless_project::HeadlessAppState;
 use anyhow::{Context as _, Result, anyhow};
 use client::ProxySettings;
-use collections::HashMap;
-use project::trusted_worktrees;
 use util::ResultExt;
 
 use extension::ExtensionHostProxy;
@@ -419,7 +417,6 @@ pub fn execute_run(
 
         log::info!("gpui app started, initializing server");
         let session = start_server(listeners, log_rx, cx, is_wsl_interop);
-        trusted_worktrees::init(HashMap::default(), Some((session.clone(), REMOTE_SERVER_PROJECT_ID)), None, cx);
 
         GitHostingProviderRegistry::set_global(git_hosting_provider_registry, cx);
         git_hosting_providers::init(cx);
@@ -471,7 +468,6 @@ pub fn execute_run(
                     languages,
                     extension_host_proxy,
                 },
-                true,
                 cx,
             )
         });

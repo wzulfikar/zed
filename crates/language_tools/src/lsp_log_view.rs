@@ -125,7 +125,7 @@ pub fn init(on_headless_host: bool, cx: &mut App) {
                     let server_id = server.server_id();
                     let weak_lsp_store = cx.weak_entity();
                     log_store.copilot_log_subscription =
-                        Some(server.on_notification::<lsp::notification::LogMessage, _>(
+                        Some(server.on_notification::<copilot::request::LogMessage, _>(
                             move |params, cx| {
                                 weak_lsp_store
                                     .update(cx, |lsp_store, cx| {
@@ -269,7 +269,7 @@ impl LspLogView {
 
         let focus_handle = cx.focus_handle();
         let focus_subscription = cx.on_focus(&focus_handle, window, |log_view, window, cx| {
-            window.focus(&log_view.editor.focus_handle(cx), cx);
+            window.focus(&log_view.editor.focus_handle(cx));
         });
 
         cx.on_release(|log_view, cx| {
@@ -330,8 +330,6 @@ impl LspLogView {
         let server_info = format!(
             "* Server: {NAME} (id {ID})
 
-* Version: {VERSION}
-
 * Binary: {BINARY}
 
 * Registered workspace folders:
@@ -342,12 +340,6 @@ impl LspLogView {
 * Configuration: {CONFIGURATION}",
             NAME = info.status.name,
             ID = info.id,
-            VERSION = info
-                .status
-                .server_version
-                .as_ref()
-                .map(|version| version.as_ref())
-                .unwrap_or("Unknown"),
             BINARY = info
                 .status
                 .binary
@@ -470,7 +462,7 @@ impl LspLogView {
             self.editor_subscriptions = editor_subscriptions;
             cx.notify();
         }
-        self.editor.read(cx).focus_handle(cx).focus(window, cx);
+        self.editor.read(cx).focus_handle(cx).focus(window);
         self.log_store.update(cx, |log_store, cx| {
             let state = log_store.get_language_server_state(server_id)?;
             state.toggled_log_kind = Some(LogKind::Logs);
@@ -502,7 +494,7 @@ impl LspLogView {
             cx.notify();
         }
 
-        self.editor.read(cx).focus_handle(cx).focus(window, cx);
+        self.editor.read(cx).focus_handle(cx).focus(window);
     }
 
     fn show_trace_for_server(
@@ -536,7 +528,7 @@ impl LspLogView {
             });
             cx.notify();
         }
-        self.editor.read(cx).focus_handle(cx).focus(window, cx);
+        self.editor.read(cx).focus_handle(cx).focus(window);
     }
 
     fn show_rpc_trace_for_server(
@@ -580,7 +572,7 @@ impl LspLogView {
             cx.notify();
         }
 
-        self.editor.read(cx).focus_handle(cx).focus(window, cx);
+        self.editor.read(cx).focus_handle(cx).focus(window);
     }
 
     fn toggle_rpc_trace_for_server(
@@ -668,7 +660,7 @@ impl LspLogView {
         self.editor = editor;
         self.editor_subscriptions = editor_subscriptions;
         cx.notify();
-        self.editor.read(cx).focus_handle(cx).focus(window, cx);
+        self.editor.read(cx).focus_handle(cx).focus(window);
         self.log_store.update(cx, |log_store, cx| {
             let state = log_store.get_language_server_state(server_id)?;
             if let Some(log_kind) = state.toggled_log_kind.take() {
@@ -1322,7 +1314,7 @@ impl LspLogToolbarItemView {
                     log_view.show_rpc_trace_for_server(id, window, cx);
                     cx.notify();
                 }
-                window.focus(&log_view.focus_handle, cx);
+                window.focus(&log_view.focus_handle);
             });
         }
         cx.notify();
@@ -1342,7 +1334,6 @@ impl ServerInfo {
             capabilities: server.capabilities(),
             status: LanguageServerStatus {
                 name: server.name(),
-                server_version: server.version(),
                 pending_work: Default::default(),
                 has_pending_diagnostic_updates: false,
                 progress_tokens: Default::default(),

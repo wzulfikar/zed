@@ -1,21 +1,18 @@
-use calloop::{
-    EventLoop, PostAction,
-    channel::{self, Sender},
-    timer::TimeoutAction,
-};
-use util::ResultExt;
-
-use std::{
-    mem::MaybeUninit,
-    thread,
-    time::{Duration, Instant},
-};
-
 use crate::{
     GLOBAL_THREAD_TIMINGS, PlatformDispatcher, Priority, PriorityQueueReceiver,
     PriorityQueueSender, RealtimePriority, RunnableVariant, THREAD_TIMINGS, TaskLabel, TaskTiming,
     ThreadTaskTimings, profiler,
 };
+use calloop::{
+    EventLoop, PostAction,
+    channel::{self, Sender},
+    timer::TimeoutAction,
+};
+use std::{
+    thread,
+    time::{Duration, Instant},
+};
+use util::ResultExt;
 
 struct TimerAfter {
     duration: Duration,
@@ -231,10 +228,7 @@ impl PlatformDispatcher for LinuxDispatcher {
                 RealtimePriority::Other => 45,
             };
 
-            // SAFETY: all sched_param members are valid when initialized to zero.
-            let mut sched_param =
-                unsafe { MaybeUninit::<libc::sched_param>::zeroed().assume_init() };
-            sched_param.sched_priority = sched_priority;
+            let sched_param = libc::sched_param { sched_priority };
             // SAFETY: sched_param is a valid initialized structure
             let result = unsafe { libc::pthread_setschedparam(thread_id, policy, &sched_param) };
             if result != 0 {

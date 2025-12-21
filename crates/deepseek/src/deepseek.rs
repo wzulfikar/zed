@@ -103,9 +103,8 @@ impl Model {
 
     pub fn max_output_tokens(&self) -> Option<u64> {
         match self {
-            // Their API treats this max against the context window, which means we hit the limit a lot
-            // Using the default value of None in the API instead
-            Self::Chat | Self::Reasoner => None,
+            Self::Chat => Some(8_192),
+            Self::Reasoner => Some(64_000),
             Self::Custom {
                 max_output_tokens, ..
             } => *max_output_tokens,

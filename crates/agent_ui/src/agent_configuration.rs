@@ -22,8 +22,7 @@ use gpui::{
 };
 use language::LanguageRegistry;
 use language_model::{
-    IconOrSvg, LanguageModelProvider, LanguageModelProviderId, LanguageModelRegistry,
-    ZED_CLOUD_PROVIDER_ID,
+    LanguageModelProvider, LanguageModelProviderId, LanguageModelRegistry, ZED_CLOUD_PROVIDER_ID,
 };
 use language_models::AllLanguageModelSettings;
 use notifications::status_toast::{StatusToast, ToastIcon};
@@ -118,7 +117,7 @@ impl AgentConfiguration {
     }
 
     fn build_provider_configuration_views(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let providers = LanguageModelRegistry::read_global(cx).visible_providers();
+        let providers = LanguageModelRegistry::read_global(cx).providers();
         for provider in providers {
             self.add_provider_configuration_view(&provider, window, cx);
         }
@@ -262,12 +261,9 @@ impl AgentConfiguration {
                                     .w_full()
                                     .gap_1p5()
                                     .child(
-                                        match provider.icon() {
-                                            IconOrSvg::Svg(path) => Icon::from_external_svg(path),
-                                            IconOrSvg::Icon(name) => Icon::new(name),
-                                        }
-                                        .size(IconSize::Small)
-                                        .color(Color::Muted),
+                                        Icon::new(provider.icon())
+                                            .size(IconSize::Small)
+                                            .color(Color::Muted),
                                     )
                                     .child(
                                         h_flex()
@@ -420,7 +416,7 @@ impl AgentConfiguration {
         &mut self,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let providers = LanguageModelRegistry::read_global(cx).visible_providers();
+        let providers = LanguageModelRegistry::read_global(cx).providers();
 
         let popover_menu = PopoverMenu::new("add-provider-popover")
             .trigger(
@@ -979,7 +975,7 @@ impl AgentConfiguration {
                 let icon = if let Some(icon_path) = agent_server_store.agent_icon(&name) {
                     AgentIcon::Path(icon_path)
                 } else {
-                    AgentIcon::Name(IconName::Sparkle)
+                    AgentIcon::Name(IconName::Ai)
                 };
                 let display_name = agent_server_store
                     .agent_display_name(&name)
@@ -1141,7 +1137,6 @@ impl AgentConfiguration {
     ) -> impl IntoElement {
         let id = id.into();
         let display_name = display_name.into();
-
         let icon = match icon {
             AgentIcon::Name(icon_name) => Icon::new(icon_name)
                 .size(IconSize::Small)

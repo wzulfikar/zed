@@ -370,8 +370,7 @@ actions!(
         AcceptEditPrediction,
         /// Accepts a partial edit prediction.
         #[action(deprecated_aliases = ["editor::AcceptPartialCopilotSuggestion"])]
-        AcceptNextWordEditPrediction,
-        AcceptNextLineEditPrediction,
+        AcceptPartialEditPrediction,
         /// Applies all diff hunks in the editor.
         ApplyAllDiffHunks,
         /// Applies the diff hunk at the current position.

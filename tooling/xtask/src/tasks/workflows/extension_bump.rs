@@ -1,4 +1,4 @@
-use gh_workflow::{ctx::Context, *};
+use gh_workflow::*;
 use indoc::indoc;
 
 use crate::tasks::workflows::{
@@ -287,8 +287,7 @@ fn create_pull_request(new_version: StepOutput, generated_token: StepOutput) -> 
             .add("base", "main")
             .add("delete-branch", true)
             .add("token", generated_token.to_string())
-            .add("sign-commits", true)
-            .add("assignees", Context::github().actor().to_string()),
+            .add("sign-commits", true),
     )
 }
 

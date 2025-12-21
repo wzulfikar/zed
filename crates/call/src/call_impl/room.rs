@@ -305,7 +305,6 @@ impl Room {
 
     pub(crate) fn leave(&mut self, cx: &mut Context<Self>) -> Task<Result<()>> {
         cx.notify();
-        self.emit_video_track_unsubscribed_events(cx);
         self.leave_internal(cx)
     }
 
@@ -351,14 +350,6 @@ impl Room {
         self.live_kit.take();
         self.pending_room_update.take();
         self.maintain_connection.take();
-    }
-
-    fn emit_video_track_unsubscribed_events(&self, cx: &mut Context<Self>) {
-        for participant in self.remote_participants.values() {
-            for sid in participant.video_tracks.keys() {
-                cx.emit(Event::RemoteVideoTrackUnsubscribed { sid: sid.clone() });
-            }
-        }
     }
 
     async fn maintain_connection(
@@ -890,9 +881,6 @@ impl Room {
                                 cx.emit(Event::RemoteProjectUnshared {
                                     project_id: project.id,
                                 });
-                            }
-                            for sid in participant.video_tracks.keys() {
-                                cx.emit(Event::RemoteVideoTrackUnsubscribed { sid: sid.clone() });
                             }
                             false
                         }

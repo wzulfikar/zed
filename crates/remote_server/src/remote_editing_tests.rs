@@ -1933,7 +1933,6 @@ pub async fn init_test(
                 languages,
                 extension_host_proxy: proxy,
             },
-            false,
             cx,
         )
     });
@@ -1978,5 +1977,5 @@ fn build_project(ssh: Entity<RemoteClient>, cx: &mut TestAppContext) -> Entity<P
         Project::init(&client, cx);
     });
 
-    cx.update(|cx| Project::remote(ssh, client, node, user_store, languages, fs, false, cx))
+    cx.update(|cx| Project::remote(ssh, client, node, user_store, languages, fs, cx))
 }

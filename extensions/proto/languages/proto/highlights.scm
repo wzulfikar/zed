@@ -9,7 +9,6 @@
   "returns"
   "message"
   "enum"
-  "extend"
   "oneof"
   "repeated"
   "reserved"

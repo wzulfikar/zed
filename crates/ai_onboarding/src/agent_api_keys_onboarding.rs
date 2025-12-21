@@ -1,9 +1,9 @@
 use gpui::{Action, IntoElement, ParentElement, RenderOnce, point};
-use language_model::{IconOrSvg, LanguageModelRegistry, ZED_CLOUD_PROVIDER_ID};
+use language_model::{LanguageModelRegistry, ZED_CLOUD_PROVIDER_ID};
 use ui::{Divider, List, ListBulletItem, prelude::*};
 
 pub struct ApiKeysWithProviders {
-    configured_providers: Vec<(IconOrSvg, SharedString)>,
+    configured_providers: Vec<(IconName, SharedString)>,
 }
 
 impl ApiKeysWithProviders {
@@ -13,8 +13,7 @@ impl ApiKeysWithProviders {
             |this: &mut Self, _registry, event: &language_model::Event, cx| match event {
                 language_model::Event::ProviderStateChanged(_)
                 | language_model::Event::AddedProvider(_)
-                | language_model::Event::RemovedProvider(_)
-                | language_model::Event::ProvidersChanged => {
+                | language_model::Event::RemovedProvider(_) => {
                     this.configured_providers = Self::compute_configured_providers(cx)
                 }
                 _ => {}
@@ -27,9 +26,9 @@ impl ApiKeysWithProviders {
         }
     }
 
-    fn compute_configured_providers(cx: &App) -> Vec<(IconOrSvg, SharedString)> {
+    fn compute_configured_providers(cx: &App) -> Vec<(IconName, SharedString)> {
         LanguageModelRegistry::read_global(cx)
-            .visible_providers()
+            .providers()
             .iter()
             .filter(|provider| {
                 provider.is_authenticated(cx) && provider.id() != ZED_CLOUD_PROVIDER_ID
@@ -48,14 +47,7 @@ impl Render for ApiKeysWithProviders {
                 .map(|(icon, name)| {
                     h_flex()
                         .gap_1p5()
-                        .child(
-                            match icon {
-                                IconOrSvg::Icon(icon_name) => Icon::new(icon_name),
-                                IconOrSvg::Svg(icon_path) => Icon::from_external_svg(icon_path),
-                            }
-                            .size(IconSize::XSmall)
-                            .color(Color::Muted),
-                        )
+                        .child(Icon::new(icon).size(IconSize::XSmall).color(Color::Muted))
                         .child(Label::new(name))
                 });
         div()

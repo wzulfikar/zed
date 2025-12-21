@@ -6,7 +6,7 @@ use crate::{
 use anyhow::Result;
 use collections::HashMap;
 use editor::{
-    Editor, EditorEvent, EditorSettings, ExcerptRange, MultiBuffer, PathKey,
+    Editor, EditorEvent, ExcerptRange, MultiBuffer, PathKey,
     display_map::{BlockPlacement, BlockProperties, BlockStyle, CustomBlockId},
     multibuffer_context_lines,
 };
@@ -175,7 +175,7 @@ impl BufferDiagnosticsEditor {
                     // `BufferDiagnosticsEditor` instance.
                     EditorEvent::Focused => {
                         if buffer_diagnostics_editor.multibuffer.read(cx).is_empty() {
-                            window.focus(&buffer_diagnostics_editor.focus_handle, cx);
+                            window.focus(&buffer_diagnostics_editor.focus_handle);
                         }
                     }
                     EditorEvent::Blurred => {
@@ -517,7 +517,7 @@ impl BufferDiagnosticsEditor {
                                 .editor
                                 .read(cx)
                                 .focus_handle(cx)
-                                .focus(window, cx);
+                                .focus(window);
                         }
                     }
                 }
@@ -617,7 +617,7 @@ impl BufferDiagnosticsEditor {
         // not empty, focus on the editor instead, which will allow the user to
         // start interacting and editing the buffer's contents.
         if self.focus_handle.is_focused(window) && !self.multibuffer.read(cx).is_empty() {
-            self.editor.focus_handle(cx).focus(window, cx)
+            self.editor.focus_handle(cx).focus(window)
         }
     }
 
@@ -701,12 +701,8 @@ impl Item for BufferDiagnosticsEditor {
         });
     }
 
-    fn breadcrumb_location(&self, cx: &App) -> ToolbarItemLocation {
-        if EditorSettings::get_global(cx).toolbar.breadcrumbs {
-            ToolbarItemLocation::PrimaryLeft
-        } else {
-            ToolbarItemLocation::Hidden
-        }
+    fn breadcrumb_location(&self, _: &App) -> ToolbarItemLocation {
+        ToolbarItemLocation::PrimaryLeft
     }
 
     fn breadcrumbs(&self, theme: &theme::Theme, cx: &App) -> Option<Vec<BreadcrumbText>> {

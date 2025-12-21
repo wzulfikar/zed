@@ -61,8 +61,6 @@ Examples:
 )]
 struct Args {
     /// Wait for all of the given paths to be opened/closed before exiting.
-    ///
-    /// When opening a directory, waits until the created window is closed.
     #[arg(short, long)]
     wait: bool,
     /// Add files to the currently open workspace

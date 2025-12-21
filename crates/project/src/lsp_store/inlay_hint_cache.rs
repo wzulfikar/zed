@@ -8,7 +8,7 @@ use language::{
     row_chunk::{RowChunk, RowChunks},
 };
 use lsp::LanguageServerId;
-use text::Point;
+use text::Anchor;
 
 use crate::{InlayHint, InlayId};
 
@@ -90,7 +90,10 @@ impl BufferInlayHints {
         }
     }
 
-    pub fn applicable_chunks(&self, ranges: &[Range<Point>]) -> impl Iterator<Item = RowChunk> {
+    pub fn applicable_chunks(
+        &self,
+        ranges: &[Range<text::Anchor>],
+    ) -> impl Iterator<Item = RowChunk> {
         self.chunks.applicable_chunks(ranges)
     }
 
@@ -222,5 +225,9 @@ impl BufferInlayHints {
                 self.hint_resolves.remove(&hint_id);
             }
         }
+    }
+
+    pub fn chunk_range(&self, chunk: RowChunk) -> Option<Range<Anchor>> {
+        self.chunks.chunk_range(chunk)
     }
 }

@@ -1,4 +1,5 @@
-use crate::multibuffer_hint::MultibufferHint;
+pub use crate::welcome::ShowWelcome;
+use crate::{multibuffer_hint::MultibufferHint, welcome::WelcomePage};
 use client::{Client, UserStore, zed_urls};
 use db::kvp::KEY_VALUE_STORE;
 use fs::Fs;
@@ -16,8 +17,6 @@ use ui::{
     Divider, KeyBinding, ParentElement as _, StatefulInteractiveElement, Vector, VectorName,
     WithScrollbar as _, prelude::*, rems_from_px,
 };
-pub use workspace::welcome::ShowWelcome;
-use workspace::welcome::WelcomePage;
 use workspace::{
     AppState, Workspace, WorkspaceId,
     dock::DockPosition,
@@ -25,12 +24,12 @@ use workspace::{
     notifications::NotifyResultExt as _,
     open_new, register_serializable_item, with_active_or_new_workspace,
 };
-use zed_actions::OpenOnboarding;
 
 mod base_keymap_picker;
 mod basics_page;
 pub mod multibuffer_hint;
 mod theme_preview;
+mod welcome;
 
 /// Imports settings from Visual Studio Code.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Deserialize, JsonSchema, Action)]
@@ -52,6 +51,14 @@ pub struct ImportCursorSettings {
 
 pub const FIRST_OPEN: &str = "first_open";
 pub const DOCS_URL: &str = "https://zed.dev/docs/";
+
+actions!(
+    zed,
+    [
+        /// Opens the onboarding view.
+        OpenOnboarding
+    ]
+);
 
 actions!(
     onboarding,
@@ -114,8 +121,7 @@ pub fn init(cx: &mut App) {
                     if let Some(existing) = existing {
                         workspace.activate_item(&existing, true, true, window, cx);
                     } else {
-                        let settings_page = cx
-                            .new(|cx| WelcomePage::new(workspace.weak_handle(), false, window, cx));
+                        let settings_page = WelcomePage::new(window, cx);
                         workspace.add_item_to_active_pane(
                             Box::new(settings_page),
                             None,
@@ -190,7 +196,7 @@ pub fn show_onboarding_view(app_state: Arc<AppState>, cx: &mut App) -> Task<anyh
                 let onboarding_page = Onboarding::new(workspace, cx);
                 workspace.add_item_to_center(Box::new(onboarding_page.clone()), window, cx);
 
-                window.focus(&onboarding_page.focus_handle(cx), cx);
+                window.focus(&onboarding_page.focus_handle(cx));
 
                 cx.notify();
             };
@@ -277,11 +283,11 @@ impl Render for Onboarding {
             .on_action(Self::handle_sign_in)
             .on_action(Self::handle_open_account)
             .on_action(cx.listener(|_, _: &menu::SelectNext, window, cx| {
-                window.focus_next(cx);
+                window.focus_next();
                 cx.notify();
             }))
             .on_action(cx.listener(|_, _: &menu::SelectPrevious, window, cx| {
-                window.focus_prev(cx);
+                window.focus_prev();
                 cx.notify();
             }))
             .child(
@@ -421,9 +427,7 @@ fn go_to_welcome_page(cx: &mut App) {
             if let Some(idx) = idx {
                 pane.activate_item(idx, true, true, window, cx);
             } else {
-                let item = Box::new(
-                    cx.new(|cx| WelcomePage::new(workspace.weak_handle(), false, window, cx)),
-                );
+                let item = Box::new(WelcomePage::new(window, cx));
                 pane.add_item(item, true, true, Some(onboarding_idx), window, cx);
             }
 
