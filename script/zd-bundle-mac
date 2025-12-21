@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Same like ./script/bundle-mac except we skipped the `script/generate-licenses` (line 86).
+# To see diffs between this and script/bundle-mac:
+# git diff --no-index script/zd-bundle-mac script/bundle-mac
+
 set -euo pipefail
 source script/lib/blob-store.sh
 
@@ -79,8 +83,9 @@ else
     exit 1
 fi
 
+# NOTE: for zd, we skip generate-license because the script seems to get stuck here
 # Generate the licenses first, so they can be baked into the binaries
-script/generate-licenses
+# script/generate-licenses
 
 rustup target add $target_triple
 
