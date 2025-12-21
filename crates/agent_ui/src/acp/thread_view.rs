@@ -59,6 +59,7 @@ use super::entry_view_state::EntryViewState;
 use crate::acp::AcpModelSelectorPopover;
 use crate::acp::ModeSelector;
 use crate::acp::entry_view_state::{EntryViewEvent, ViewEvent};
+use crate::acp::generation_timer::GenerationTimer;
 use crate::acp::message_editor::{MessageEditor, MessageEditorEvent};
 use crate::agent_diff::AgentDiff;
 use crate::profile_selector::{ProfileProvider, ProfileSelector};
@@ -296,8 +297,7 @@ pub struct AcpThreadView {
     _subscriptions: [Subscription; 5],
     show_codex_windows_warning: bool,
     in_flight_prompt: Option<Vec<acp::ContentBlock>>,
-    generation_started_at: Option<Instant>,
-    generation_final_elapsed: Option<Duration>,
+    generation_timer: GenerationTimer,
 }
 
 enum ThreadState {
@@ -459,8 +459,7 @@ impl AcpThreadView {
             resume_thread_metadata: resume_thread,
             show_codex_windows_warning,
             in_flight_prompt: None,
-            generation_started_at: None,
-            generation_final_elapsed: None,
+            generation_timer: GenerationTimer::default(),
         }
     }
 
@@ -898,8 +897,7 @@ impl AcpThreadView {
         self.thread_error.take();
         self.thread_retry_status.take();
         self.in_flight_prompt.take();
-        self.generation_started_at.take();
-        self.generation_final_elapsed.take();
+        self.generation_timer.cancel();
 
         if let Some(thread) = self.thread() {
             self._cancel_task = Some(thread.update(cx, |thread, cx| thread.cancel(cx)));
@@ -1200,8 +1198,7 @@ impl AcpThreadView {
 
             this.update_in(cx, |this, window, cx| {
                 this.in_flight_prompt = Some(contents.clone());
-                this.generation_started_at = Some(Instant::now());
-                this.generation_final_elapsed = None; // Reset previous final timing
+                this.generation_timer.start();
                 this.set_editor_is_expanded(false, cx);
                 this.scroll_to_bottom(cx);
                 this.message_editor.update(cx, |message_editor, cx| {
@@ -1233,9 +1230,7 @@ impl AcpThreadView {
                 // Store final elapsed time and stop the timer
                 this.update(cx, |this, _| {
                     this.in_flight_prompt.take();
-                    if let Some(started_at) = this.generation_started_at.take() {
-                        this.generation_final_elapsed = Some(started_at.elapsed());
-                    }
+                    this.generation_timer.stop();
                 })
                 .ok();
                 "success"
@@ -4405,7 +4400,7 @@ impl AcpThreadView {
                             .gap_0p5()
                             .child(self.render_add_context_button(cx))
                             .child(self.render_follow_toggle(cx))
-                            .child(self.render_thread_timer(cx))
+                            .child(self.generation_timer.render())
                             .children(self.render_burn_mode_toggle(cx)),
                     )
                     .child(
@@ -4680,17 +4675,6 @@ impl AcpThreadView {
         telemetry::event!("Follow Agent Selected", following = !following);
     }
 
-    fn format_elapsed_time(&self, elapsed: Duration) -> String {
-        let seconds = elapsed.as_secs();
-        if seconds < 60 {
-            format!(" {}s", seconds)
-        } else {
-            let minutes = seconds / 60;
-            let seconds = seconds % 60;
-            format!(" {}m {}s", minutes, seconds)
-        }
-    }
-
     fn render_follow_toggle(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let following = self.is_following(cx);
 
@@ -4728,19 +4712,6 @@ impl AcpThreadView {
             .on_click(cx.listener(move |this, _, window, cx| {
                 this.toggle_following(window, cx);
             }))
-    }
-
-    fn render_thread_timer(&self, _cx: &mut Context<Self>) -> impl IntoElement {
-        let elapsed_time = if let Some(final_elapsed) = &self.generation_final_elapsed {
-            self.format_elapsed_time(*final_elapsed)
-        } else if let Some(started_at) = &self.generation_started_at {
-            self.format_elapsed_time(started_at.elapsed())
-        } else {
-            "".to_string()
-        };
-        Label::new(elapsed_time)
-            .size(LabelSize::Small)
-            .color(Color::Muted)
     }
 
     fn render_add_context_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -5969,8 +5940,7 @@ impl AcpThreadView {
                     let connection = thread.read(cx).connection().clone();
                     this.clear_thread_error(cx);
                     if let Some(message) = this.in_flight_prompt.take() {
-                        this.generation_started_at.take();
-                        this.generation_final_elapsed.take();
+                        this.generation_timer.cancel();
                         this.message_editor.update(cx, |editor, cx| {
                             editor.set_message(message, window, cx);
                         });
