@@ -885,6 +885,7 @@ pub enum AcpThreadEvent {
     AvailableCommandsUpdated(Vec<acp::AvailableCommand>),
     ModeUpdated(acp::SessionModeId),
     CleanupDetachedSendTask,
+    ConfigOptionsUpdated(Vec<acp::SessionConfigOption>),
 }
 
 impl EventEmitter<AcpThreadEvent> for AcpThread {}
@@ -1194,6 +1195,10 @@ impl AcpThread {
                 current_mode_id,
                 ..
             }) => cx.emit(AcpThreadEvent::ModeUpdated(current_mode_id)),
+            acp::SessionUpdate::ConfigOptionUpdate(acp::ConfigOptionUpdate {
+                config_options,
+                ..
+            }) => cx.emit(AcpThreadEvent::ConfigOptionsUpdated(config_options)),
             _ => {}
         }
         Ok(())

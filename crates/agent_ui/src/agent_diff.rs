@@ -1365,6 +1365,7 @@ impl AgentDiff {
             | AcpThreadEvent::Retry(_)
             | AcpThreadEvent::ModeUpdated(_)
             | AcpThreadEvent::CleanupDetachedSendTask => {}
+            AcpThreadEvent::ConfigOptionsUpdated(_) => {}
         }
     }
 

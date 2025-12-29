@@ -1,3 +1,4 @@
+mod config_options;
 mod entry_view_state;
 mod generation_timer;
 mod message_editor;
