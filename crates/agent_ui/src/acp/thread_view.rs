@@ -6035,64 +6035,66 @@ impl AcpThreadView {
         let is_generating = matches!(thread.read(cx).status(), ThreadStatus::Generating);
         let show_stats = AgentSettings::get_global(cx).show_turn_stats;
 
-        // Icon logic:
-        // - When generating: always show spinner
-        // - When not generating: show undo only if show_stats is enabled
-        let leading_icon: AnyElement = if is_generating {
+        let leading_container = div().w_3().h_3();
+        let leading_icon = if is_generating {
             if waiting_for_confirmation {
-                SpinnerLabel::sand()
-                    .size(LabelSize::Small)
-                    .into_any_element()
+                leading_container.child(SpinnerLabel::sand().size(LabelSize::Small))
             } else {
-                h_flex()
-                    .w_2()
-                    .child(SpinnerLabel::new().size(LabelSize::Small))
-                    .into_any_element()
+                leading_container.child(SpinnerLabel::new().size(LabelSize::Small))
             }
         } else if show_stats {
-            IconButton::new("edit-message", IconName::Undo)
-                .icon_size(IconSize::Small)
-                .icon_color(Color::Muted)
-                .tooltip(Tooltip::text("Edit Message"))
-                .on_click(cx.listener(move |this, _, window, cx| {
-                    if let Some(thread) = this.thread() {
-                        let entries = thread.read(cx).entries();
-                        if let Some(last_user_message_ix) = entries
-                            .iter()
-                            .rposition(|entry| entry.user_message().is_some())
-                        {
-                            if let Some(editor) = this
-                                .entry_view_state
-                                .read(cx)
-                                .entry(last_user_message_ix)
-                                .and_then(|e| e.message_editor())
+            leading_container.child(
+                IconButton::new("edit-message", IconName::Undo)
+                    .icon_size(IconSize::XSmall)
+                    .icon_color(Color::Muted)
+                    .tooltip(Tooltip::text("Edit Message"))
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        if let Some(thread) = this.thread() {
+                            let entries = thread.read(cx).entries();
+                            if let Some(last_user_message_ix) = entries
+                                .iter()
+                                .rposition(|entry| entry.user_message().is_some())
                             {
-                                this.editing_message = Some(last_user_message_ix);
-                                editor.focus_handle(cx).focus(window, cx);
-                                this.list_state.scroll_to(ListOffset {
-                                    item_ix: last_user_message_ix,
-                                    offset_in_item: px(0.0),
-                                });
-                                cx.notify();
+                                if let Some(editor) = this
+                                    .entry_view_state
+                                    .read(cx)
+                                    .entry(last_user_message_ix)
+                                    .and_then(|e| e.message_editor())
+                                {
+                                    this.editing_message = Some(last_user_message_ix);
+                                    editor.focus_handle(cx).focus(window, cx);
+                                    this.list_state.scroll_to(ListOffset {
+                                        item_ix: last_user_message_ix,
+                                        offset_in_item: px(0.0),
+                                    });
+                                    cx.notify();
+                                }
                             }
                         }
-                    }
-                }))
-                .into_any_element()
+                    })),
+            )
         } else {
-            h_flex().into_any_element()
+            leading_container
         };
 
         let turn_stats = h_flex()
-            .id("thread-controls")
-            .gap_2()
+            .gap_1()
             .child(leading_icon)
             .child(self.render_turn_stats(is_generating, cx))
             .into_any_element();
 
-        // When waiting for confirmation, only show turn stats, hide action buttons
-        if waiting_for_confirmation {
-            return turn_stats;
+        let mut container = h_flex()
+            .w_full()
+            .py_1()
+            .px_4()
+            .gap_px()
+            .opacity(0.6)
+            .hover(|s| s.opacity(1.))
+            .justify_between()
+            .child(turn_stats);
+
+        if waiting_for_confirmation || is_generating {
+            return container;
         }
 
         let open_as_markdown = IconButton::new("open-as-markdown", IconName::FileMarkdown)
@@ -6126,17 +6128,7 @@ impl AcpThreadView {
                 this.scroll_to_top(cx);
             }));
 
-        let mut container = h_flex()
-            .w_full()
-            .py_1()
-            .px_4()
-            .gap_px()
-            .opacity(0.6)
-            .hover(|s| s.opacity(1.))
-            .justify_between()
-            .child(turn_stats);
-
-        let mut right_section = h_flex();
+        let mut thread_actions = h_flex();
 
         if AgentSettings::get_global(cx).enable_feedback
             && self
@@ -6151,7 +6143,7 @@ impl AcpThreadView {
                 )
             };
 
-            right_section = right_section
+            thread_actions = thread_actions
                 .child(
                     IconButton::new("feedback-thumbs-up", IconName::ThumbsUp)
                         .shape(ui::IconButtonShape::Square)
@@ -6213,7 +6205,7 @@ impl AcpThreadView {
                     this.sync_thread(window, cx);
                 }));
 
-            right_section = right_section.child(sync_button);
+            thread_actions = thread_actions.child(sync_button);
         }
 
         if cx.has_flag::<AgentSharingFeatureFlag>() && !self.is_imported_thread(cx) {
@@ -6226,15 +6218,15 @@ impl AcpThreadView {
                     this.share_thread(window, cx);
                 }));
 
-            right_section = right_section.child(share_button);
+            thread_actions = thread_actions.child(share_button);
         }
 
-        right_section = right_section
+        thread_actions = thread_actions
             .child(open_as_markdown)
             .child(scroll_to_recent_user_prompt)
             .child(scroll_to_top);
 
-        container.child(right_section).into_any_element()
+        container.child(thread_actions)
     }
 
     fn render_feedback_feedback_editor(editor: Entity<Editor>, cx: &Context<Self>) -> Div {
