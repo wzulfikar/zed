@@ -78,9 +78,6 @@ use crate::{
     SendNextQueuedMessage, ToggleBurnMode, ToggleProfileSelector,
 };
 
-const STOPWATCH_THRESHOLD: Duration = Duration::from_secs(1);
-const TOKEN_THRESHOLD: u64 = 1;
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum ThreadFeedback {
     Positive,
@@ -2646,11 +2643,7 @@ impl AcpThreadView {
                 .w_full()
                 .child(primary)
                 .map(|this| {
-                    if needs_confirmation {
-                        this.child(self.render_generating(true, cx))
-                    } else {
-                        this.child(self.render_thread_controls(&thread, cx))
-                    }
+                    this.child(self.render_thread_controls(&thread, needs_confirmation, cx))
                 })
                 .when_some(
                     self.thread_feedback.comments_editor.clone(),
@@ -5118,7 +5111,7 @@ impl AcpThreadView {
                             .gap_0p5()
                             .child(self.render_add_context_button(cx))
                             .child(self.render_follow_toggle(cx))
-                            .child(self.generation_timer.render())
+                            // .child(self.generation_timer.render())
                             .children(self.render_burn_mode_toggle(cx)),
                     )
                     .child(
@@ -5976,60 +5969,89 @@ impl AcpThreadView {
         }
     }
 
-    fn render_generating(&self, confirmation: bool, cx: &App) -> impl IntoElement {
+    fn render_turn_stats(
+        &self,
+        is_generating: bool,
+        needs_confirmation: bool,
+        cx: &Context<Self>,
+    ) -> impl IntoElement {
         let show_stats = AgentSettings::get_global(cx).show_turn_stats;
+
+        let leading_icon = {
+            let container = h_flex()
+                .w(px(18.))
+                .h(px(18.))
+                .justify_center()
+                .items_center();
+            if is_generating {
+                if needs_confirmation {
+                    container.child(SpinnerLabel::sand().size(LabelSize::Small))
+                } else {
+                    container.child(SpinnerLabel::new().size(LabelSize::Small))
+                }
+            } else if show_stats {
+                container.child(
+                    IconButton::new("edit-message", IconName::Undo)
+                        .icon_size(IconSize::XSmall)
+                        .icon_color(Color::Muted)
+                        .tooltip(Tooltip::text("Edit Message"))
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            if let Some(thread) = this.thread() {
+                                let entries = thread.read(cx).entries();
+                                if let Some(last_user_message_ix) = entries
+                                    .iter()
+                                    .rposition(|entry| entry.user_message().is_some())
+                                {
+                                    if let Some(editor) = this
+                                        .entry_view_state
+                                        .read(cx)
+                                        .entry(last_user_message_ix)
+                                        .and_then(|e| e.message_editor())
+                                    {
+                                        this.editing_message = Some(last_user_message_ix);
+                                        editor.focus_handle(cx).focus(window, cx);
+                                        this.list_state.scroll_to(ListOffset {
+                                            item_ix: last_user_message_ix,
+                                            offset_in_item: px(0.0),
+                                        });
+                                        cx.notify();
+                                    }
+                                }
+                            }
+                        })),
+                )
+            } else {
+                container
+            }
+        };
+
         let elapsed_label = show_stats
             .then(|| {
-                self.turn_started_at.and_then(|started_at| {
-                    let elapsed = started_at.elapsed();
-                    (elapsed > STOPWATCH_THRESHOLD).then(|| duration_alt_display(elapsed))
-                })
+                if is_generating {
+                    self.turn_started_at
+                        .map(|started| duration_alt_display(started.elapsed()))
+                } else {
+                    self.last_turn_duration.map(duration_alt_display)
+                }
             })
             .flatten();
-
-        let is_waiting = confirmation
-            || self
-                .thread()
-                .is_some_and(|thread| thread.read(cx).has_in_progress_tool_calls());
 
         let turn_tokens_label = elapsed_label
             .is_some()
             .then(|| {
-                self.turn_tokens
-                    .filter(|&tokens| tokens > TOKEN_THRESHOLD)
+                let tokens = if is_generating {
+                    self.turn_tokens
+                } else {
+                    self.last_turn_tokens
+                };
+                tokens
+                    .filter(|&tokens| tokens > 0)
                     .map(|tokens| crate::text_thread_editor::humanize_token_count(tokens))
             })
             .flatten();
 
-        let arrow_icon = if is_waiting {
-            IconName::ArrowUp
-        } else {
-            IconName::ArrowDown
-        };
-
-        h_flex()
-            .id("generating-spinner")
-            .py_2()
-            .px(rems_from_px(22.))
+        let turn_stats = h_flex()
             .gap_2()
-            .map(|this| {
-                if confirmation {
-                    this.child(
-                        h_flex()
-                            .w_2()
-                            .child(SpinnerLabel::sand().size(LabelSize::Small)),
-                    )
-                    .child(
-                        div().min_w(rems(8.)).child(
-                            LoadingLabel::new("Waiting Confirmation")
-                                .size(LabelSize::Small)
-                                .color(Color::Muted),
-                        ),
-                    )
-                } else {
-                    this.child(SpinnerLabel::new().size(LabelSize::Small))
-                }
-            })
             .when_some(elapsed_label, |this, elapsed| {
                 this.child(
                     Label::new(elapsed)
@@ -6042,29 +6064,28 @@ impl AcpThreadView {
                     h_flex()
                         .gap_0p5()
                         .child(
-                            Icon::new(arrow_icon)
+                            Icon::new(IconName::ArrowDown)
                                 .size(IconSize::XSmall)
                                 .color(Color::Muted),
                         )
                         .child(
-                            Label::new(format!("{} tokens", tokens))
+                            Label::new(format!("{} tok", tokens))
                                 .size(LabelSize::Small)
                                 .color(Color::Muted),
                         ),
                 )
-            })
+            });
+
+        h_flex()
+            .gap_1()
+            .items_center()
+            .child(leading_icon)
+            .child(turn_stats)
             .into_any_element()
     }
 
-    fn render_thread_controls(
-        &self,
-        thread: &Entity<AcpThread>,
-        cx: &Context<Self>,
-    ) -> impl IntoElement {
-        let is_generating = matches!(thread.read(cx).status(), ThreadStatus::Generating);
-        if is_generating {
-            return self.render_generating(false, cx).into_any_element();
-        }
+    fn render_thread_actions(&self, cx: &Context<Self>) -> impl IntoElement {
+        let mut thread_actions = h_flex();
 
         let open_as_markdown = IconButton::new("open-as-markdown", IconName::FileMarkdown)
             .shape(ui::IconButtonShape::Square)
@@ -6097,56 +6118,6 @@ impl AcpThreadView {
                 this.scroll_to_top(cx);
             }));
 
-        let show_stats = AgentSettings::get_global(cx).show_turn_stats;
-        let last_turn_clock = show_stats
-            .then(|| {
-                self.last_turn_duration
-                    .filter(|&duration| duration > STOPWATCH_THRESHOLD)
-                    .map(|duration| {
-                        Label::new(duration_alt_display(duration))
-                            .size(LabelSize::Small)
-                            .color(Color::Muted)
-                    })
-            })
-            .flatten();
-
-        let last_turn_tokens = last_turn_clock
-            .is_some()
-            .then(|| {
-                self.last_turn_tokens
-                    .filter(|&tokens| tokens > TOKEN_THRESHOLD)
-                    .map(|tokens| {
-                        Label::new(format!(
-                            "{} tokens",
-                            crate::text_thread_editor::humanize_token_count(tokens)
-                        ))
-                        .size(LabelSize::Small)
-                        .color(Color::Muted)
-                    })
-            })
-            .flatten();
-
-        let mut container = h_flex()
-            .w_full()
-            .py_2()
-            .px_5()
-            .gap_px()
-            .opacity(0.6)
-            .hover(|s| s.opacity(1.))
-            .justify_end()
-            .when(
-                last_turn_tokens.is_some() || last_turn_clock.is_some(),
-                |this| {
-                    this.child(
-                        h_flex()
-                            .gap_1()
-                            .px_1()
-                            .when_some(last_turn_tokens, |this, label| this.child(label))
-                            .when_some(last_turn_clock, |this, label| this.child(label)),
-                    )
-                },
-            );
-
         if AgentSettings::get_global(cx).enable_feedback
             && self
                 .thread()
@@ -6160,7 +6131,7 @@ impl AcpThreadView {
                 )
             };
 
-            container = container
+            thread_actions = thread_actions
                 .child(
                     IconButton::new("feedback-thumbs-up", IconName::ThumbsUp)
                         .shape(ui::IconButtonShape::Square)
@@ -6222,7 +6193,7 @@ impl AcpThreadView {
                     this.sync_thread(window, cx);
                 }));
 
-            container = container.child(sync_button);
+            thread_actions = thread_actions.child(sync_button);
         }
 
         if cx.has_flag::<AgentSharingFeatureFlag>() && !self.is_imported_thread(cx) {
@@ -6235,13 +6206,37 @@ impl AcpThreadView {
                     this.share_thread(window, cx);
                 }));
 
-            container = container.child(share_button);
+            thread_actions = thread_actions.child(share_button);
         }
 
-        container
+        thread_actions
             .child(open_as_markdown)
             .child(scroll_to_recent_user_prompt)
             .child(scroll_to_top)
+            .into_any_element()
+    }
+
+    fn render_thread_controls(
+        &self,
+        thread: &Entity<AcpThread>,
+        needs_confirmation: bool,
+        cx: &Context<Self>,
+    ) -> impl IntoElement {
+        let is_generating = matches!(thread.read(cx).status(), ThreadStatus::Generating);
+
+        h_flex()
+            .id("thread-controls")
+            .w_full()
+            .py_2()
+            .px_4()
+            .gap_px()
+            .opacity(0.6)
+            .hover(|s| s.opacity(1.))
+            .justify_between()
+            .child(self.render_turn_stats(is_generating, needs_confirmation, cx))
+            // .when(!needs_confirmation && !is_generating, |this| {
+            //     this.child(self.render_thread_actions(cx))
+            // })
             .into_any_element()
     }
 
