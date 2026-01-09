@@ -6034,7 +6034,7 @@ impl AcpThreadView {
         let is_generating = matches!(thread.read(cx).status(), ThreadStatus::Generating);
         let show_stats = AgentSettings::get_global(cx).show_turn_stats;
 
-        let leading_container = div().w(px(18.));
+        let leading_container = h_flex().w(px(18.)).justify_center();
         let leading_icon = if is_generating {
             if waiting_for_confirmation {
                 leading_container.child(SpinnerLabel::sand().size(LabelSize::Small))
