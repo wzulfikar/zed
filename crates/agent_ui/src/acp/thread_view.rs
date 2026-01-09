@@ -6234,9 +6234,9 @@ impl AcpThreadView {
             .hover(|s| s.opacity(1.))
             .justify_between()
             .child(self.render_turn_stats(is_generating, needs_confirmation, cx))
-            // .when(!needs_confirmation && !is_generating, |this| {
-            //     this.child(self.render_thread_actions(cx))
-            // })
+            .when(!needs_confirmation && !is_generating, |this| {
+                this.child(self.render_thread_actions(cx))
+            })
             .into_any_element()
     }
 
