@@ -5977,53 +5977,54 @@ impl AcpThreadView {
     ) -> impl IntoElement {
         let show_stats = AgentSettings::get_global(cx).show_turn_stats;
 
-        let leading_icon = {
-            let container = h_flex()
-                .w(px(18.))
-                .h(px(18.))
-                .justify_center()
-                .items_center();
-            if is_generating {
-                if needs_confirmation {
-                    container.child(SpinnerLabel::sand().size(LabelSize::Small))
-                } else {
-                    container.child(SpinnerLabel::new().size(LabelSize::Small))
-                }
-            } else if show_stats {
-                container.child(
-                    IconButton::new("edit-message", IconName::Undo)
-                        .icon_size(IconSize::XSmall)
-                        .icon_color(Color::Muted)
-                        .tooltip(Tooltip::text("Edit Message"))
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            if let Some(thread) = this.thread() {
-                                let entries = thread.read(cx).entries();
-                                if let Some(last_user_message_ix) = entries
-                                    .iter()
-                                    .rposition(|entry| entry.user_message().is_some())
-                                {
-                                    if let Some(editor) = this
-                                        .entry_view_state
-                                        .read(cx)
-                                        .entry(last_user_message_ix)
-                                        .and_then(|e| e.message_editor())
-                                    {
-                                        this.editing_message = Some(last_user_message_ix);
-                                        editor.focus_handle(cx).focus(window, cx);
-                                        this.list_state.scroll_to(ListOffset {
-                                            item_ix: last_user_message_ix,
-                                            offset_in_item: px(0.0),
-                                        });
-                                        cx.notify();
-                                    }
-                                }
-                            }
-                        })),
-                )
+        let mut leading_icon = h_flex()
+            .w(px(18.))
+            .h(px(18.))
+            .justify_center()
+            .items_center();
+
+        if is_generating {
+            if needs_confirmation {
+                leading_icon = leading_icon.child(SpinnerLabel::sand().size(LabelSize::Small));
             } else {
-                container
+                leading_icon = leading_icon.child(SpinnerLabel::new().size(LabelSize::Small));
             }
-        };
+        }
+
+        if !show_stats {
+            return leading_icon.into_any_element();
+        }
+
+        leading_icon = leading_icon.child(
+            IconButton::new("edit-message", IconName::Undo)
+                .icon_size(IconSize::XSmall)
+                .icon_color(Color::Muted)
+                .tooltip(Tooltip::text("Edit Message"))
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    if let Some(thread) = this.thread() {
+                        let entries = thread.read(cx).entries();
+                        if let Some(last_user_message_ix) = entries
+                            .iter()
+                            .rposition(|entry| entry.user_message().is_some())
+                        {
+                            if let Some(editor) = this
+                                .entry_view_state
+                                .read(cx)
+                                .entry(last_user_message_ix)
+                                .and_then(|e| e.message_editor())
+                            {
+                                this.editing_message = Some(last_user_message_ix);
+                                editor.focus_handle(cx).focus(window, cx);
+                                this.list_state.scroll_to(ListOffset {
+                                    item_ix: last_user_message_ix,
+                                    offset_in_item: px(0.0),
+                                });
+                                cx.notify();
+                            }
+                        }
+                    }
+                })),
+        );
 
         let elapsed_label = show_stats
             .then(|| {
@@ -6050,7 +6051,7 @@ impl AcpThreadView {
             })
             .flatten();
 
-        let turn_stats = h_flex()
+        let turn_stats_labels = h_flex()
             .gap_2()
             .when_some(elapsed_label, |this, elapsed| {
                 this.child(
@@ -6080,7 +6081,7 @@ impl AcpThreadView {
             .gap_1()
             .items_center()
             .child(leading_icon)
-            .child(turn_stats)
+            .child(turn_stats_labels)
             .into_any_element()
     }
 
@@ -6225,7 +6226,6 @@ impl AcpThreadView {
         let is_generating = matches!(thread.read(cx).status(), ThreadStatus::Generating);
 
         h_flex()
-            .id("thread-controls")
             .w_full()
             .py_2()
             .px_4()
