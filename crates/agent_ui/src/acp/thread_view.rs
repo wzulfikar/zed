@@ -2643,11 +2643,7 @@ impl AcpThreadView {
                 .w_full()
                 .child(primary)
                 .map(|this| {
-                    if needs_confirmation {
-                        this.child(self.render_generating(true, cx))
-                    } else {
-                        this.child(self.render_thread_controls(&thread, cx))
-                    }
+                    this.child(self.render_thread_controls(&thread, needs_confirmation, cx))
                 })
                 .when_some(
                     self.thread_feedback.comments_editor.clone(),
@@ -5975,6 +5971,7 @@ impl AcpThreadView {
 
     fn render_turn_stats(&self, is_generating: bool, cx: &App) -> impl IntoElement {
         let show_stats = AgentSettings::get_global(cx).show_turn_stats;
+
         let elapsed_label = show_stats
             .then(|| {
                 if is_generating {
@@ -6001,6 +5998,7 @@ impl AcpThreadView {
             .flatten();
 
         h_flex()
+            .id("turn-stats")
             .py_2()
             .gap_2()
             .when_some(elapsed_label, |this, elapsed| {
@@ -6028,84 +6026,74 @@ impl AcpThreadView {
             })
     }
 
-    fn render_generating(&self, confirmation: bool, cx: &App) -> impl IntoElement {
-        // let is_waiting = confirmation
-        //     || self
-        //         .thread()
-        //         .is_some_and(|thread| thread.read(cx).has_in_progress_tool_calls());
-
-        h_flex()
-            .id("generating-spinner")
-            .py_2()
-            .px(rems_from_px(22.))
-            .gap_2()
-            .map(|this| {
-                if confirmation {
-                    this.child(
-                        h_flex()
-                            .w_2()
-                            .child(SpinnerLabel::sand().size(LabelSize::Small)),
-                    )
-                    .child(
-                        div().min_w(rems(8.)).child(
-                            LoadingLabel::new("Waiting Confirmation")
-                                .size(LabelSize::Small)
-                                .color(Color::Muted),
-                        ),
-                    )
-                } else {
-                    this.child(SpinnerLabel::new().size(LabelSize::Small))
-                }
-            })
-            .child(self.render_turn_stats(true, cx))
-            .into_any_element()
-    }
-
     fn render_thread_controls(
         &self,
         thread: &Entity<AcpThread>,
+        waiting_for_confirmation: bool,
         cx: &Context<Self>,
     ) -> impl IntoElement {
         let is_generating = matches!(thread.read(cx).status(), ThreadStatus::Generating);
-        if is_generating {
-            return self.render_generating(false, cx).into_any_element();
-        }
+        let show_stats = AgentSettings::get_global(cx).show_turn_stats;
 
-        let turn_stats = h_flex()
-            .items_center()
-            .child(
-                IconButton::new("edit-message", IconName::Undo)
-                    .icon_size(IconSize::Small)
-                    .icon_color(Color::Muted)
-                    .tooltip(Tooltip::text("Edit Message"))
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        if let Some(thread) = this.thread() {
-                            let entries = thread.read(cx).entries();
-                            if let Some(last_user_message_ix) = entries
-                                .iter()
-                                .rposition(|entry| entry.user_message().is_some())
+        // Icon logic:
+        // - When generating: always show spinner
+        // - When not generating: show undo only if show_stats is enabled
+        let leading_icon: AnyElement = if is_generating {
+            if waiting_for_confirmation {
+                SpinnerLabel::sand()
+                    .size(LabelSize::Small)
+                    .into_any_element()
+            } else {
+                h_flex()
+                    .w_2()
+                    .child(SpinnerLabel::new().size(LabelSize::Small))
+                    .into_any_element()
+            }
+        } else if show_stats {
+            IconButton::new("edit-message", IconName::Undo)
+                .icon_size(IconSize::Small)
+                .icon_color(Color::Muted)
+                .tooltip(Tooltip::text("Edit Message"))
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    if let Some(thread) = this.thread() {
+                        let entries = thread.read(cx).entries();
+                        if let Some(last_user_message_ix) = entries
+                            .iter()
+                            .rposition(|entry| entry.user_message().is_some())
+                        {
+                            if let Some(editor) = this
+                                .entry_view_state
+                                .read(cx)
+                                .entry(last_user_message_ix)
+                                .and_then(|e| e.message_editor())
                             {
-                                if let Some(editor) = this
-                                    .entry_view_state
-                                    .read(cx)
-                                    .entry(last_user_message_ix)
-                                    .and_then(|e| e.message_editor())
-                                {
-                                    this.editing_message = Some(last_user_message_ix);
-                                    editor.focus_handle(cx).focus(window, cx);
-                                    this.list_state.scroll_to(ListOffset {
-                                        item_ix: last_user_message_ix,
-                                        offset_in_item: px(0.0),
-                                    });
-                                    cx.notify();
-                                }
+                                this.editing_message = Some(last_user_message_ix);
+                                editor.focus_handle(cx).focus(window, cx);
+                                this.list_state.scroll_to(ListOffset {
+                                    item_ix: last_user_message_ix,
+                                    offset_in_item: px(0.0),
+                                });
+                                cx.notify();
                             }
                         }
-                    })),
-            )
-            .pr_1()
-            .child(self.render_turn_stats(false, cx))
+                    }
+                }))
+                .into_any_element()
+        } else {
+            h_flex().into_any_element()
+        };
+
+        let turn_stats = h_flex()
+            .id("thread-controls")
+            .gap_2()
+            .child(leading_icon)
+            .child(self.render_turn_stats(is_generating, cx))
             .into_any_element();
+
+        // When waiting for confirmation, only show turn stats, hide action buttons
+        if waiting_for_confirmation {
+            return turn_stats;
+        }
 
         let open_as_markdown = IconButton::new("open-as-markdown", IconName::FileMarkdown)
             .shape(ui::IconButtonShape::Square)
@@ -6140,15 +6128,13 @@ impl AcpThreadView {
 
         let mut container = h_flex()
             .w_full()
-            .py_2()
-            .px_5()
+            .py_1()
+            .px_4()
             .gap_px()
             .opacity(0.6)
             .hover(|s| s.opacity(1.))
-            .justify_between();
-
-        let left_section = turn_stats;
-        container = container.child(left_section);
+            .justify_between()
+            .child(turn_stats);
 
         let mut right_section = h_flex();
 
