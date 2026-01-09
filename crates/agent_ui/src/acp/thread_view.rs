@@ -6047,7 +6047,7 @@ impl AcpThreadView {
                                 .color(Color::Muted),
                         )
                         .child(
-                            Label::new(format!("{} tokens", tokens))
+                            Label::new(format!("{}t", tokens))
                                 .size(LabelSize::Small)
                                 .color(Color::Muted),
                         ),
@@ -6097,35 +6097,6 @@ impl AcpThreadView {
                 this.scroll_to_top(cx);
             }));
 
-        let show_stats = AgentSettings::get_global(cx).show_turn_stats;
-        let last_turn_clock = show_stats
-            .then(|| {
-                self.last_turn_duration
-                    .filter(|&duration| duration > STOPWATCH_THRESHOLD)
-                    .map(|duration| {
-                        Label::new(duration_alt_display(duration))
-                            .size(LabelSize::Small)
-                            .color(Color::Muted)
-                    })
-            })
-            .flatten();
-
-        let last_turn_tokens = last_turn_clock
-            .is_some()
-            .then(|| {
-                self.last_turn_tokens
-                    .filter(|&tokens| tokens > TOKEN_THRESHOLD)
-                    .map(|tokens| {
-                        Label::new(format!(
-                            "{} tokens",
-                            crate::text_thread_editor::humanize_token_count(tokens)
-                        ))
-                        .size(LabelSize::Small)
-                        .color(Color::Muted)
-                    })
-            })
-            .flatten();
-
         let mut container = h_flex()
             .w_full()
             .py_2()
@@ -6133,19 +6104,7 @@ impl AcpThreadView {
             .gap_px()
             .opacity(0.6)
             .hover(|s| s.opacity(1.))
-            .justify_end()
-            .when(
-                last_turn_tokens.is_some() || last_turn_clock.is_some(),
-                |this| {
-                    this.child(
-                        h_flex()
-                            .gap_1()
-                            .px_1()
-                            .when_some(last_turn_tokens, |this, label| this.child(label))
-                            .when_some(last_turn_clock, |this, label| this.child(label)),
-                    )
-                },
-            );
+            .justify_end();
 
         if AgentSettings::get_global(cx).enable_feedback
             && self
