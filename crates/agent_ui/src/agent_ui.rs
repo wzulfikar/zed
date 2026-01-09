@@ -486,6 +486,8 @@ mod tests {
             use_modifier_to_send: true,
             message_editor_min_lines: 1,
             max_recent_history_items: 4,
+            tool_permissions: Default::default(),
+            show_turn_stats: false,
         };
 
         cx.update(|cx| {
