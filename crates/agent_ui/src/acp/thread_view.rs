@@ -5969,8 +5969,57 @@ impl AcpThreadView {
         }
     }
 
-    fn render_turn_stats(&self, is_generating: bool, cx: &App) -> impl IntoElement {
+    fn render_turn_stats(
+        &self,
+        is_generating: bool,
+        waiting_confirmation: bool,
+        cx: &Context<Self>,
+    ) -> impl IntoElement {
         let show_stats = AgentSettings::get_global(cx).show_turn_stats;
+
+        let leading_icon = {
+            let container = h_flex().w(px(18.)).justify_center();
+            if is_generating {
+                if waiting_confirmation {
+                    container.child(SpinnerLabel::sand().size(LabelSize::Small))
+                } else {
+                    container.child(SpinnerLabel::new().size(LabelSize::Small))
+                }
+            } else if show_stats {
+                container.child(
+                    IconButton::new("edit-message", IconName::Undo)
+                        .icon_size(IconSize::XSmall)
+                        .icon_color(Color::Muted)
+                        .tooltip(Tooltip::text("Edit Message"))
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            if let Some(thread) = this.thread() {
+                                let entries = thread.read(cx).entries();
+                                if let Some(last_user_message_ix) = entries
+                                    .iter()
+                                    .rposition(|entry| entry.user_message().is_some())
+                                {
+                                    if let Some(editor) = this
+                                        .entry_view_state
+                                        .read(cx)
+                                        .entry(last_user_message_ix)
+                                        .and_then(|e| e.message_editor())
+                                    {
+                                        this.editing_message = Some(last_user_message_ix);
+                                        editor.focus_handle(cx).focus(window, cx);
+                                        this.list_state.scroll_to(ListOffset {
+                                            item_ix: last_user_message_ix,
+                                            offset_in_item: px(0.0),
+                                        });
+                                        cx.notify();
+                                    }
+                                }
+                            }
+                        })),
+                )
+            } else {
+                container
+            }
+        };
 
         let elapsed_label = show_stats
             .then(|| {
@@ -5997,8 +6046,7 @@ impl AcpThreadView {
             })
             .flatten();
 
-        h_flex()
-            .id("turn-stats")
+        let turn_stats = h_flex()
             .gap_2()
             .when_some(elapsed_label, |this, elapsed| {
                 this.child(
@@ -6022,80 +6070,18 @@ impl AcpThreadView {
                                 .color(Color::Muted),
                         ),
                 )
-            })
-    }
+            });
 
-    fn render_thread_controls(
-        &self,
-        thread: &Entity<AcpThread>,
-        waiting_for_confirmation: bool,
-        cx: &Context<Self>,
-    ) -> impl IntoElement {
-        let is_generating = matches!(thread.read(cx).status(), ThreadStatus::Generating);
-        let show_stats = AgentSettings::get_global(cx).show_turn_stats;
-
-        let leading_container = h_flex().w(px(18.)).justify_center();
-        let leading_icon = if is_generating {
-            if waiting_for_confirmation {
-                leading_container.child(SpinnerLabel::sand().size(LabelSize::Small))
-            } else {
-                leading_container.child(SpinnerLabel::new().size(LabelSize::Small))
-            }
-        } else if show_stats {
-            leading_container.child(
-                IconButton::new("edit-message", IconName::Undo)
-                    .icon_size(IconSize::XSmall)
-                    .icon_color(Color::Muted)
-                    .tooltip(Tooltip::text("Edit Message"))
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        if let Some(thread) = this.thread() {
-                            let entries = thread.read(cx).entries();
-                            if let Some(last_user_message_ix) = entries
-                                .iter()
-                                .rposition(|entry| entry.user_message().is_some())
-                            {
-                                if let Some(editor) = this
-                                    .entry_view_state
-                                    .read(cx)
-                                    .entry(last_user_message_ix)
-                                    .and_then(|e| e.message_editor())
-                                {
-                                    this.editing_message = Some(last_user_message_ix);
-                                    editor.focus_handle(cx).focus(window, cx);
-                                    this.list_state.scroll_to(ListOffset {
-                                        item_ix: last_user_message_ix,
-                                        offset_in_item: px(0.0),
-                                    });
-                                    cx.notify();
-                                }
-                            }
-                        }
-                    })),
-            )
-        } else {
-            leading_container
-        };
-
-        let turn_stats = h_flex()
+        h_flex()
             .gap_1()
             .items_center()
             .child(leading_icon)
-            .child(self.render_turn_stats(is_generating, cx))
-            .into_any_element();
+            .child(turn_stats)
+            .into_any_element()
+    }
 
-        let container = h_flex()
-            .w_full()
-            .py_2()
-            .px_4()
-            .gap_px()
-            .opacity(0.6)
-            .hover(|s| s.opacity(1.))
-            .justify_between()
-            .child(turn_stats);
-
-        if waiting_for_confirmation || is_generating {
-            return container;
-        }
+    fn render_thread_actions(&self, cx: &Context<Self>) -> impl IntoElement {
+        let mut thread_actions = h_flex();
 
         let open_as_markdown = IconButton::new("open-as-markdown", IconName::FileMarkdown)
             .shape(ui::IconButtonShape::Square)
@@ -6127,8 +6113,6 @@ impl AcpThreadView {
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.scroll_to_top(cx);
             }));
-
-        let mut thread_actions = h_flex();
 
         if AgentSettings::get_global(cx).enable_feedback
             && self
@@ -6221,12 +6205,35 @@ impl AcpThreadView {
             thread_actions = thread_actions.child(share_button);
         }
 
-        thread_actions = thread_actions
+        thread_actions
             .child(open_as_markdown)
             .child(scroll_to_recent_user_prompt)
-            .child(scroll_to_top);
+            .child(scroll_to_top)
+            .into_any_element()
+    }
 
-        container.child(thread_actions)
+    fn render_thread_controls(
+        &self,
+        thread: &Entity<AcpThread>,
+        waiting_confirmation: bool,
+        cx: &Context<Self>,
+    ) -> impl IntoElement {
+        let is_generating = matches!(thread.read(cx).status(), ThreadStatus::Generating);
+
+        h_flex()
+            .id("thread-controls")
+            .w_full()
+            .py_2()
+            .px_4()
+            .gap_px()
+            .opacity(0.6)
+            .hover(|s| s.opacity(1.))
+            .justify_between()
+            .child(self.render_turn_stats(is_generating, waiting_confirmation, cx))
+            .when(!waiting_confirmation && !is_generating, |this| {
+                this.child(self.render_thread_actions(cx))
+            })
+            .into_any_element()
     }
 
     fn render_feedback_feedback_editor(editor: Entity<Editor>, cx: &Context<Self>) -> Div {
