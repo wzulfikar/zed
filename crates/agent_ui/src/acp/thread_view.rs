@@ -6074,10 +6074,10 @@ impl AcpThreadView {
         let turn_stats = h_flex()
             .items_center()
             .child(
-                IconButton::new("retry-generation", IconName::RotateCcw)
+                IconButton::new("edit-message", IconName::Undo)
                     .icon_size(IconSize::Small)
                     .icon_color(Color::Muted)
-                    .tooltip(Tooltip::text("Retry Generation"))
+                    .tooltip(Tooltip::text("Edit Message"))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         if let Some(thread) = this.thread() {
                             let entries = thread.read(cx).entries();
@@ -6085,8 +6085,20 @@ impl AcpThreadView {
                                 .iter()
                                 .rposition(|entry| entry.user_message().is_some())
                             {
-                                let message_editor = this.message_editor.clone();
-                                this.regenerate(last_user_message_ix, message_editor, window, cx);
+                                if let Some(editor) = this
+                                    .entry_view_state
+                                    .read(cx)
+                                    .entry(last_user_message_ix)
+                                    .and_then(|e| e.message_editor())
+                                {
+                                    this.editing_message = Some(last_user_message_ix);
+                                    editor.focus_handle(cx).focus(window, cx);
+                                    this.list_state.scroll_to(ListOffset {
+                                        item_ix: last_user_message_ix,
+                                        offset_in_item: px(0.0),
+                                    });
+                                    cx.notify();
+                                }
                             }
                         }
                     })),
