@@ -5994,7 +5994,9 @@ impl AcpThreadView {
                 } else {
                     self.last_turn_tokens
                 };
-                tokens.map(|tokens| crate::text_thread_editor::humanize_token_count(tokens))
+                tokens
+                    .filter(|&tokens| tokens > 0)
+                    .map(|tokens| crate::text_thread_editor::humanize_token_count(tokens))
             })
             .flatten();
 
