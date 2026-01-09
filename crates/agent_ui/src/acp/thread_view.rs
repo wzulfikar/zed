@@ -78,9 +78,6 @@ use crate::{
     SendNextQueuedMessage, ToggleBurnMode, ToggleProfileSelector,
 };
 
-const STOPWATCH_THRESHOLD: Duration = Duration::from_secs(1);
-const TOKEN_THRESHOLD: u64 = 1;
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum ThreadFeedback {
     Positive,
@@ -5976,29 +5973,33 @@ impl AcpThreadView {
         }
     }
 
-    fn render_turn_stats(&self, cx: &App) -> impl IntoElement {
+    fn render_turn_stats(&self, is_generating: bool, cx: &App) -> impl IntoElement {
         let show_stats = AgentSettings::get_global(cx).show_turn_stats;
         let elapsed_label = show_stats
             .then(|| {
-                self.turn_started_at.and_then(|started_at| {
-                    let elapsed = started_at.elapsed();
-                    (elapsed > STOPWATCH_THRESHOLD).then(|| duration_alt_display(elapsed))
-                })
+                if is_generating {
+                    self.turn_started_at
+                        .map(|started| duration_alt_display(started.elapsed()))
+                } else {
+                    self.last_turn_duration.map(duration_alt_display)
+                }
             })
             .flatten();
 
         let turn_tokens_label = elapsed_label
             .is_some()
             .then(|| {
-                self.turn_tokens
-                    .filter(|&tokens| tokens > TOKEN_THRESHOLD)
-                    .map(|tokens| crate::text_thread_editor::humanize_token_count(tokens))
+                let tokens = if is_generating {
+                    self.turn_tokens
+                } else {
+                    self.last_turn_tokens
+                };
+                tokens.map(|tokens| crate::text_thread_editor::humanize_token_count(tokens))
             })
             .flatten();
 
         h_flex()
             .py_2()
-            // .px(rems_from_px(22.))
             .gap_2()
             .when_some(elapsed_label, |this, elapsed| {
                 this.child(
@@ -6017,7 +6018,7 @@ impl AcpThreadView {
                                 .color(Color::Muted),
                         )
                         .child(
-                            Label::new(format!("{}t", tokens))
+                            Label::new(format!("{} tok", tokens))
                                 .size(LabelSize::Small)
                                 .color(Color::Muted),
                         ),
@@ -6054,7 +6055,7 @@ impl AcpThreadView {
                     this.child(SpinnerLabel::new().size(LabelSize::Small))
                 }
             })
-            .child(self.render_turn_stats(cx))
+            .child(self.render_turn_stats(true, cx))
             .into_any_element()
     }
 
@@ -6068,7 +6069,15 @@ impl AcpThreadView {
             return self.render_generating(false, cx).into_any_element();
         }
 
-        let turn_stats = self.render_turn_stats(cx).into_any_element();
+        let turn_stats = h_flex()
+            .child(
+                Icon::new(IconName::RotateCcw)
+                    .size(IconSize::Small)
+                    .color(Color::Muted),
+            )
+            .pr_1()
+            .child(self.render_turn_stats(false, cx))
+            .into_any_element();
 
         let open_as_markdown = IconButton::new("open-as-markdown", IconName::FileMarkdown)
             .shape(ui::IconButtonShape::Square)
