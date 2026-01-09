@@ -5976,7 +5976,7 @@ impl AcpThreadView {
         }
     }
 
-    fn render_generating(&self, confirmation: bool, cx: &App) -> impl IntoElement {
+    fn render_turn_stats(&self, cx: &App) -> impl IntoElement {
         let show_stats = AgentSettings::get_global(cx).show_turn_stats;
         let elapsed_label = show_stats
             .then(|| {
@@ -5987,11 +5987,6 @@ impl AcpThreadView {
             })
             .flatten();
 
-        let is_waiting = confirmation
-            || self
-                .thread()
-                .is_some_and(|thread| thread.read(cx).has_in_progress_tool_calls());
-
         let turn_tokens_label = elapsed_label
             .is_some()
             .then(|| {
@@ -6001,11 +5996,40 @@ impl AcpThreadView {
             })
             .flatten();
 
-        let arrow_icon = if is_waiting {
-            IconName::ArrowUp
-        } else {
-            IconName::ArrowDown
-        };
+        h_flex()
+            .py_2()
+            // .px(rems_from_px(22.))
+            .gap_2()
+            .when_some(elapsed_label, |this, elapsed| {
+                this.child(
+                    Label::new(elapsed)
+                        .size(LabelSize::Small)
+                        .color(Color::Muted),
+                )
+            })
+            .when_some(turn_tokens_label, |this, tokens| {
+                this.child(
+                    h_flex()
+                        .gap_0p5()
+                        .child(
+                            Icon::new(IconName::ArrowDown)
+                                .size(IconSize::XSmall)
+                                .color(Color::Muted),
+                        )
+                        .child(
+                            Label::new(format!("{}t", tokens))
+                                .size(LabelSize::Small)
+                                .color(Color::Muted),
+                        ),
+                )
+            })
+    }
+
+    fn render_generating(&self, confirmation: bool, cx: &App) -> impl IntoElement {
+        // let is_waiting = confirmation
+        //     || self
+        //         .thread()
+        //         .is_some_and(|thread| thread.read(cx).has_in_progress_tool_calls());
 
         h_flex()
             .id("generating-spinner")
@@ -6030,29 +6054,7 @@ impl AcpThreadView {
                     this.child(SpinnerLabel::new().size(LabelSize::Small))
                 }
             })
-            .when_some(elapsed_label, |this, elapsed| {
-                this.child(
-                    Label::new(elapsed)
-                        .size(LabelSize::Small)
-                        .color(Color::Muted),
-                )
-            })
-            .when_some(turn_tokens_label, |this, tokens| {
-                this.child(
-                    h_flex()
-                        .gap_0p5()
-                        .child(
-                            Icon::new(arrow_icon)
-                                .size(IconSize::XSmall)
-                                .color(Color::Muted),
-                        )
-                        .child(
-                            Label::new(format!("{}t", tokens))
-                                .size(LabelSize::Small)
-                                .color(Color::Muted),
-                        ),
-                )
-            })
+            .child(self.render_turn_stats(cx))
             .into_any_element()
     }
 
@@ -6065,6 +6067,8 @@ impl AcpThreadView {
         if is_generating {
             return self.render_generating(false, cx).into_any_element();
         }
+
+        let turn_stats = self.render_turn_stats(cx).into_any_element();
 
         let open_as_markdown = IconButton::new("open-as-markdown", IconName::FileMarkdown)
             .shape(ui::IconButtonShape::Square)
@@ -6104,7 +6108,8 @@ impl AcpThreadView {
             .gap_px()
             .opacity(0.6)
             .hover(|s| s.opacity(1.))
-            .justify_end();
+            .justify_between()
+            .child(turn_stats);
 
         if AgentSettings::get_global(cx).enable_feedback
             && self
