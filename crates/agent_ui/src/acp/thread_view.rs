@@ -6079,9 +6079,12 @@ impl AcpThreadView {
                     .on_click(cx.listener(move |this, _, window, cx| {
                         if let Some(thread) = this.thread() {
                             let entries = thread.read(cx).entries();
-                            if let Some(last_entry_ix) = entries.len().checked_sub(1) {
+                            if let Some(last_user_message_ix) = entries
+                                .iter()
+                                .rposition(|entry| entry.user_message().is_some())
+                            {
                                 let message_editor = this.message_editor.clone();
-                                this.regenerate(last_entry_ix, message_editor, window, cx);
+                                this.regenerate(last_user_message_ix, message_editor, window, cx);
                             }
                         }
                     })),
