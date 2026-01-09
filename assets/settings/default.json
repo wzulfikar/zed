@@ -1147,7 +1147,7 @@
     // Maximum number of items to show in recent history.
     //
     // Default: 3
-    "max_recent_history_items": 3
+    "max_recent_history_items": 3,
     // Whether to show turn statistics (elapsed time during generation, final turn duration).
     //
     // Default: false
