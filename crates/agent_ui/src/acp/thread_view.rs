@@ -5115,7 +5115,7 @@ impl AcpThreadView {
                             .gap_0p5()
                             .child(self.render_add_context_button(cx))
                             .child(self.render_follow_toggle(cx))
-                            .child(self.generation_timer.render())
+                            // .child(self.generation_timer.render())
                             .children(self.render_burn_mode_toggle(cx)),
                     )
                     .child(
@@ -6070,10 +6070,21 @@ impl AcpThreadView {
         }
 
         let turn_stats = h_flex()
+            .items_center()
             .child(
-                Icon::new(IconName::RotateCcw)
-                    .size(IconSize::Small)
-                    .color(Color::Muted),
+                IconButton::new("retry-generation", IconName::RotateCcw)
+                    .icon_size(IconSize::Small)
+                    .icon_color(Color::Muted)
+                    .tooltip(Tooltip::text("Retry Generation"))
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        if let Some(thread) = this.thread() {
+                            let entries = thread.read(cx).entries();
+                            if let Some(last_entry_ix) = entries.len().checked_sub(1) {
+                                let message_editor = this.message_editor.clone();
+                                this.regenerate(last_entry_ix, message_editor, window, cx);
+                            }
+                        }
+                    })),
             )
             .pr_1()
             .child(self.render_turn_stats(false, cx))
@@ -6117,8 +6128,12 @@ impl AcpThreadView {
             .gap_px()
             .opacity(0.6)
             .hover(|s| s.opacity(1.))
-            .justify_between()
-            .child(turn_stats);
+            .justify_between();
+
+        let left_section = turn_stats;
+        container = container.child(left_section);
+
+        let mut right_section = h_flex();
 
         if AgentSettings::get_global(cx).enable_feedback
             && self
@@ -6133,7 +6148,7 @@ impl AcpThreadView {
                 )
             };
 
-            container = container
+            right_section = right_section
                 .child(
                     IconButton::new("feedback-thumbs-up", IconName::ThumbsUp)
                         .shape(ui::IconButtonShape::Square)
@@ -6195,7 +6210,7 @@ impl AcpThreadView {
                     this.sync_thread(window, cx);
                 }));
 
-            container = container.child(sync_button);
+            right_section = right_section.child(sync_button);
         }
 
         if cx.has_flag::<AgentSharingFeatureFlag>() && !self.is_imported_thread(cx) {
@@ -6208,14 +6223,15 @@ impl AcpThreadView {
                     this.share_thread(window, cx);
                 }));
 
-            container = container.child(share_button);
+            right_section = right_section.child(share_button);
         }
 
-        container
+        right_section = right_section
             .child(open_as_markdown)
             .child(scroll_to_recent_user_prompt)
-            .child(scroll_to_top)
-            .into_any_element()
+            .child(scroll_to_top);
+
+        container.child(right_section).into_any_element()
     }
 
     fn render_feedback_feedback_editor(editor: Entity<Editor>, cx: &Context<Self>) -> Div {
