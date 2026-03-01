@@ -25,14 +25,3 @@ impl AgentPanelTab {
         &self.agent
     }
 }
-
-pub struct TabLabelRender {
-    pub element: AnyElement,
-    pub tooltip: Option<SharedString>,
-}
-
-#[derive(Clone, PartialEq, Eq)]
-pub enum AgentPanelTabIdentity {
-    AcpThread(acp::SessionId),
-    TextThread(Arc<Path>),
-}

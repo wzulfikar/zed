@@ -5,7 +5,7 @@ use agent::{ContextServerRegistry, ThreadStore};
 use agent_servers::AgentServer;
 use db::kvp::{Dismissable, KEY_VALUE_STORE};
 use project::{
-    AgentServerStore, ExternalAgentServerName,
+    ExternalAgentServerName,
     agent_server_store::{CLAUDE_CODE_NAME, CODEX_NAME, GEMINI_NAME},
 };
 use serde::{Deserialize, Serialize};
@@ -13,7 +13,8 @@ use settings::{LanguageModelProviderSetting, LanguageModelSelection};
 
 use zed_actions::agent::{OpenClaudeCodeOnboardingModal, ReauthenticateAgent};
 
-use crate::agent_panel_tab::{AgentPanelTab, TabId, TabLabelRender};
+use crate::ManageProfiles;
+use crate::agent_panel_tab::{AgentPanelTab, TabId};
 use crate::ui::{AcpOnboardingModal, ClaudeCodeOnboardingModal};
 use crate::{
     AddContextServer, AgentDiffPane, CloseActiveThreadTab, Follow, InlineAssistant, NewTextThread,
@@ -31,7 +32,6 @@ use crate::{
     text_thread_history::{TextThreadHistory, TextThreadHistoryEvent},
 };
 use crate::{ExternalAgent, NewExternalAgentThread, NewNativeAgentThreadFromSummary};
-use crate::{ManageProfiles, agent_panel_tab::AgentPanelTabIdentity};
 use agent_settings::AgentSettings;
 use ai_onboarding::AgentPanelOnboarding;
 use anyhow::{Result, anyhow};
@@ -409,6 +409,7 @@ pub struct AgentPanel {
     overlay_view: Option<ActiveView>,
     tab_bar_scroll_handle: ScrollHandle,
     title_edit_overlay_tab_id: Option<TabId>,
+    loading: bool,
     new_thread_menu_handle: PopoverMenuHandle<ContextMenu>,
     agent_panel_menu_handle: PopoverMenuHandle<ContextMenu>,
     agent_navigation_menu_handle: PopoverMenuHandle<ContextMenu>,
@@ -631,6 +632,7 @@ impl AgentPanel {
             active_tab_id: 0,
             tab_bar_scroll_handle: ScrollHandle::new(),
             title_edit_overlay_tab_id: None,
+            loading: false,
             new_thread_menu_handle: PopoverMenuHandle::default(),
             agent_panel_menu_handle: PopoverMenuHandle::default(),
             agent_navigation_menu_handle: PopoverMenuHandle::default(),
@@ -2513,6 +2515,203 @@ impl AgentPanel {
         }
     }
 
+    fn render_tab_bar(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let focus_handle = self.focus_handle(cx);
+
+        // Build the "new thread" menu
+        let new_thread_menu = PopoverMenu::new("new_thread_menu")
+            .trigger_with_tooltip(
+                IconButton::new("new_thread_menu_btn", IconName::Plus).icon_size(IconSize::Small),
+                {
+                    let focus_handle = focus_handle.clone();
+                    move |_window, cx| {
+                        Tooltip::for_action_in(
+                            "New Thread…",
+                            &ToggleNewThreadMenu,
+                            &focus_handle,
+                            cx,
+                        )
+                    }
+                },
+            )
+            .anchor(Corner::TopRight)
+            .with_handle(self.new_thread_menu_handle.clone())
+            .menu({
+                let workspace = self.workspace.clone();
+                move |window, cx| {
+                    telemetry::event!("New Thread Clicked");
+                    Some(ContextMenu::build(window, cx, |menu, _window, _cx| {
+                        menu.context(focus_handle.clone())
+                            .header("Zed Agent")
+                            .item(
+                                ContextMenuEntry::new("New Thread")
+                                    .action(NewThread.boxed_clone())
+                                    .icon(IconName::Thread)
+                                    .icon_color(Color::Muted)
+                                    .handler({
+                                        let workspace = workspace.clone();
+                                        move |window, cx| {
+                                            if let Some(workspace) = workspace.upgrade() {
+                                                workspace.update(cx, |workspace, cx| {
+                                                    if let Some(panel) =
+                                                        workspace.panel::<AgentPanel>(cx)
+                                                    {
+                                                        panel.update(cx, |panel, cx| {
+                                                            panel.new_agent_thread(
+                                                                AgentType::NativeAgent,
+                                                                window,
+                                                                cx,
+                                                            );
+                                                        });
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    }),
+                            )
+                            .item(
+                                ContextMenuEntry::new("New Text Thread")
+                                    .icon(IconName::TextThread)
+                                    .icon_color(Color::Muted)
+                                    .action(NewTextThread.boxed_clone())
+                                    .handler({
+                                        let workspace = workspace.clone();
+                                        move |window, cx| {
+                                            if let Some(workspace) = workspace.upgrade() {
+                                                workspace.update(cx, |workspace, cx| {
+                                                    if let Some(panel) =
+                                                        workspace.panel::<AgentPanel>(cx)
+                                                    {
+                                                        panel.update(cx, |panel, cx| {
+                                                            panel.new_agent_thread(
+                                                                AgentType::TextThread,
+                                                                window,
+                                                                cx,
+                                                            );
+                                                        });
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    }),
+                            )
+                    }))
+                }
+            });
+
+        let end_slot = h_flex()
+            .gap(DynamicSpacing::Base02.rems(cx))
+            .pl(DynamicSpacing::Base04.rems(cx))
+            .pr(DynamicSpacing::Base06.rems(cx))
+            .child(new_thread_menu)
+            .child(self.render_recent_entries_menu(IconName::MenuAltTemp, Corner::TopRight, cx))
+            .child(self.render_panel_options_menu(window, cx));
+
+        let mut tab_bar = TabBar::new("agent-tab-bar")
+            .track_scroll(&self.tab_bar_scroll_handle)
+            .end_child(end_slot);
+
+        // If we have overlay view (History/Configuration), render it
+        if let Some(overlay_view) = &self.overlay_view {
+            let overlay_title = match overlay_view {
+                ActiveView::History { .. } => "History",
+                ActiveView::Configuration => "Settings",
+                _ => "",
+            };
+            let title_element = h_flex()
+                .flex_grow()
+                .h(Tab::content_height(cx))
+                .px(DynamicSpacing::Base04.px(cx))
+                .gap(DynamicSpacing::Base04.rems(cx))
+                .bg(cx.theme().colors().tab_bar_background)
+                .child(self.render_toolbar_back_button(cx).into_any_element())
+                .child(Label::new(overlay_title).truncate().into_any_element())
+                .into_any_element();
+
+            return tab_bar.child(title_element).into_any_element();
+        }
+
+        // Render tabs
+        let active_index = self.active_tab_id;
+        for (index, tab) in self.tabs.iter().enumerate() {
+            let is_active = index == active_index;
+            let position = if index == 0 {
+                TabPosition::First
+            } else if index == self.tabs.len() - 1 {
+                TabPosition::Last
+            } else {
+                let ordering = if index < active_index {
+                    Ordering::Less
+                } else if index > active_index {
+                    Ordering::Greater
+                } else {
+                    Ordering::Equal
+                };
+                TabPosition::Middle(ordering)
+            };
+
+            // Get tab label text
+            let label_text = match tab.view() {
+                ActiveView::ExternalAgentThread { thread_view } => {
+                    thread_view.read(cx).title(cx).to_string()
+                }
+                ActiveView::TextThread { .. } => "Text Thread".to_string(),
+                _ => "".to_string(),
+            };
+
+            let tab_component = Tab::new(("agent-tab", index))
+                .position(position)
+                .close_side(TabCloseSide::End)
+                .toggle_state(is_active)
+                .on_click(cx.listener(move |this: &mut Self, _, window, cx| {
+                    this.set_active_tab_by_id(index, window, cx);
+                }))
+                .child(Label::new(label_text).truncate())
+                .end_slot(
+                    IconButton::new(("close-agent-tab", index), IconName::Close)
+                        .shape(IconButtonShape::Square)
+                        .icon_size(IconSize::Small)
+                        .visible_on_hover("")
+                        .on_click(cx.listener(move |this: &mut Self, _, window, cx| {
+                            this.remove_tab_by_id(index, window, cx);
+                        }))
+                        .tooltip(|_window, cx| cx.new(|_| Tooltip::new("Close Thread")).into()),
+                );
+
+            tab_bar = tab_bar.child(tab_component);
+        }
+
+        tab_bar.into_any_element()
+    }
+
+    fn focus_title_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.overlay_view.is_some()
+            || self.title_edit_overlay_tab_id.is_some()
+            || !matches!(
+                self.tabs.get(self.active_tab_id).map(|tab| tab.view()),
+                Some(ActiveView::ExternalAgentThread { .. } | ActiveView::TextThread { .. })
+            )
+        {
+            return;
+        }
+
+        self.title_edit_overlay_tab_id = Some(self.active_tab_id);
+        if let Some(tab) = self.tabs.get(self.active_tab_id) {
+            match tab.view() {
+                ActiveView::ExternalAgentThread { thread_view } => {
+                    if let Some(editor) = thread_view.read(cx).title_editor() {
+                        editor.focus_handle(cx).focus(window, cx);
+                    }
+                }
+                ActiveView::TextThread { title_editor, .. } => {
+                    title_editor.focus_handle(cx).focus(window, cx);
+                }
+                _ => {}
+            }
+        }
+        cx.notify();
+    }
+
     fn render_onboarding(
         &self,
         _window: &mut Window,
@@ -2846,7 +3045,7 @@ impl Render for AgentPanel {
                     thread_view.update(cx, |thread_view, cx| thread_view.reauthenticate(window, cx))
                 }
             }))
-            .child(self.render_toolbar(window, cx))
+            .child(self.render_tab_bar(window, cx))
             .children(self.render_workspace_trust_message(cx))
             .children(self.render_onboarding(window, cx))
             .map(|parent| match self.active_view() {
