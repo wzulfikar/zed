@@ -3,6 +3,7 @@ mod agent_configuration;
 mod agent_diff;
 mod agent_model_selector;
 mod agent_panel;
+mod agent_panel_tab;
 mod agent_registry_ui;
 mod buffer_codegen;
 mod completion_provider;

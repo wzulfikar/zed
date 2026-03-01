@@ -1109,6 +1109,16 @@ impl AcpThreadView {
         }
     }
 
+    pub fn session_id(&self, cx: &App) -> Option<acp::SessionId> {
+        if let Some(thread) = self.thread() {
+            Some(thread.read(cx).session_id().clone())
+        } else {
+            self.resume_thread_metadata
+                .as_ref()
+                .map(|metadata| metadata.session_id.clone())
+        }
+    }
+
     pub fn cancel_generation(&mut self, cx: &mut Context<Self>) {
         self.thread_error.take();
         self.thread_retry_status.take();
