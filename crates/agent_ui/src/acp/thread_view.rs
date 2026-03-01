@@ -6228,12 +6228,10 @@ impl AcpThreadView {
                             .child(self.render_follow_toggle(cx))
                             .when(self.thread_duration > Duration::ZERO, |this| {
                                 this.child(
-                                    h_flex().gap_1().child(
-                                        Label::new(duration_alt_display(
-                                            self.thread_duration,
-                                        ))
-                                        .size(LabelSize::Small)
-                                        .color(Color::Muted),
+                                    h_flex().pl_2().child(
+                                        Label::new(duration_alt_display(self.thread_duration))
+                                            .size(LabelSize::Small)
+                                            .color(Color::Muted),
                                     ),
                                 )
                             }),
