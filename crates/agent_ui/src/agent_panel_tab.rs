@@ -1,9 +1,4 @@
-use std::path::Path;
-use std::sync::Arc;
-
 use crate::agent_panel::{ActiveView, AgentType};
-use agent_client_protocol as acp;
-use gpui::{AnyElement, SharedString};
 
 pub type TabId = usize;
 
