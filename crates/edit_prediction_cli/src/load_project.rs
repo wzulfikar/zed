@@ -68,15 +68,6 @@ pub async fn run_load_project(
 
     let (prompt_inputs, language_name) = buffer.read_with(&cx, |buffer, _cx| {
         let cursor_point = cursor_position.to_point(&buffer);
-        let snapshot = buffer.snapshot();
-        let (editable_range, context_range) = editable_and_context_ranges_for_cursor_position(
-            cursor_point,
-            &snapshot,
-            zeta2::MAX_REWRITE_TOKENS,
-            zeta2::MAX_CONTEXT_TOKENS,
-        );
-        let editable_range = editable_range.to_offset(&snapshot);
-        let context_range = context_range.to_offset(&snapshot);
         let language_name = buffer
             .language()
             .map(|l| l.name().to_string())

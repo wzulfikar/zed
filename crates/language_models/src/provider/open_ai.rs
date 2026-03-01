@@ -26,7 +26,6 @@ use open_ai::{
     },
     stream_completion,
 };
-use serde_json::{Value, json};
 use settings::{OpenAiAvailableModel as AvailableModel, Settings, SettingsStore};
 use std::pin::Pin;
 use std::str::FromStr as _;
@@ -1386,45 +1385,6 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use futures::{StreamExt, executor::block_on};
-    use gpui::TestAppContext;
-    use language_model::{LanguageModelRequestMessage, LanguageModelRequestTool};
-    use open_ai::responses::{
-        ResponseFunctionToolCall, ResponseOutputItem, ResponseOutputMessage, ResponseStatusDetails,
-        ResponseSummary, ResponseUsage, StreamEvent as ResponsesStreamEvent,
-    };
-    use pretty_assertions::assert_eq;
-
-    fn map_response_events(events: Vec<ResponsesStreamEvent>) -> Vec<LanguageModelCompletionEvent> {
-        block_on(async {
-            OpenAiResponseEventMapper::new()
-                .map_stream(Box::pin(futures::stream::iter(events.into_iter().map(Ok))))
-                .collect::<Vec<_>>()
-                .await
-                .into_iter()
-                .map(Result::unwrap)
-                .collect()
-        })
-    }
-
-    fn response_item_message(id: &str) -> ResponseOutputItem {
-        ResponseOutputItem::Message(ResponseOutputMessage {
-            id: Some(id.to_string()),
-            role: Some("assistant".to_string()),
-            status: Some("in_progress".to_string()),
-            content: vec![],
-        })
-    }
-
-    fn response_item_function_call(id: &str, args: Option<&str>) -> ResponseOutputItem {
-        ResponseOutputItem::FunctionCall(ResponseFunctionToolCall {
-            id: Some(id.to_string()),
-            status: Some("in_progress".to_string()),
-            name: Some("get_weather".to_string()),
-            call_id: Some("call_123".to_string()),
-            arguments: args.map(|s| s.to_string()).unwrap_or_default(),
-        })
-    }
 
     fn map_response_events(events: Vec<ResponsesStreamEvent>) -> Vec<LanguageModelCompletionEvent> {
         block_on(async {

@@ -847,7 +847,7 @@ impl ProjectSearchView {
                             this.toggle_search_option(SearchOptions::CASE_SENSITIVE, cx);
                         }
                     }
-                    if EditorSettings::get_global(cx).use_instant_search {
+                    if EditorSettings::get_global(cx).use_live_search {
                         this.search_debounce(cx);
                     }
                 }
@@ -1502,7 +1502,7 @@ impl ProjectSearchView {
                     editor.scroll(Point::default(), Some(Axis::Vertical), window, cx);
                 }
             });
-            if !EditorSettings::get_global(cx).use_instant_search {
+            if !EditorSettings::get_global(cx).use_live_search {
                 // Move focus to results editor
                 if is_new_search && self.query_editor.focus_handle(cx).is_focused(window) {
                     self.focus_results_editor(window, cx);

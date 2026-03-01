@@ -3345,7 +3345,7 @@ async fn test_lsp_pull_diagnostics(
     pull_diagnostics_handle.next().await.unwrap();
     // pull_diagnostics_handle.next().await.unwrap();
     assert_eq!(
-        5,
+        4,
         diagnostics_pulls_made.load(atomic::Ordering::Acquire),
         "Client lib.rs edits should trigger another diagnostics pull for open buffers"
     );

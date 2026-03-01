@@ -116,10 +116,8 @@ impl TestAppContext {
     /// Creates a new `TestAppContext`. Usually you can rely on `#[gpui::test]` to do this for you.
     pub fn build(dispatcher: TestDispatcher, fn_name: Option<&'static str>) -> Self {
         let arc_dispatcher = Arc::new(dispatcher.clone());
-        let liveness = std::sync::Arc::new(());
         let background_executor = BackgroundExecutor::new(arc_dispatcher.clone());
-        let foreground_executor =
-            ForegroundExecutor::new(arc_dispatcher, Arc::downgrade(&liveness));
+        let foreground_executor = ForegroundExecutor::new(arc_dispatcher);
         let platform = TestPlatform::new(background_executor.clone(), foreground_executor.clone());
         let asset_source = Arc::new(());
         let http_client = http_client::FakeHttpClient::with_404_response();

@@ -1252,7 +1252,7 @@ impl SerializableItem for Editor {
                                             );
                                         });
                                     }
-                                });
+                                })?;
                             }
 
                             editor.update_in(cx, |editor, window, cx| {

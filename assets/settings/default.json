@@ -674,7 +674,7 @@
   // When enabled, automatically starts a search (in project search) as you type a character.
   // With this mode, the focus will stay in the search field instead of automatically
   // moved to the results editor.
-  "use_instant_search": true,
+  "use_live_search": true,
   // Inlay hint related settings
   "inlay_hints": {
     // Global switch to toggle hints on and off, switched off by default.
