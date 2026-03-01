@@ -1455,11 +1455,6 @@ impl WorkspaceDb {
                 kind = RemoteConnectionKind::Ssh;
                 host = Some(format!("mock-{}", options.id));
             }
-            #[cfg(any(test, feature = "test-support"))]
-            RemoteConnectionOptions::Mock(options) => {
-                kind = RemoteConnectionKind::Ssh;
-                host = Some(format!("mock-{}", options.id));
-            }
         }
         Self::get_or_create_remote_connection_query(
             this,
