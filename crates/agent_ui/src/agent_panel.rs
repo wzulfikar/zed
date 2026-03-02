@@ -404,6 +404,7 @@ pub struct AgentPanel {
     focus_handle: FocusHandle,
     active_view: ActiveView,
     previous_view: Option<ActiveView>,
+    tab_initialized: bool,
     tabs: Vec<AgentPanelTab>,
     active_tab_id: TabId,
     overlay_view: Option<ActiveView>,
@@ -627,6 +628,7 @@ impl AgentPanel {
             context_server_registry,
             previous_view: None,
             overlay_view: None,
+            tab_initialized: false,
             tabs: Vec::new(),
             active_tab_id: 0,
             tab_bar_scroll_handle: ScrollHandle::new(),
@@ -1664,7 +1666,8 @@ impl Panel for AgentPanel {
     }
 
     fn set_active(&mut self, active: bool, window: &mut Window, cx: &mut Context<Self>) {
-        if active && self.tabs.is_empty() {
+        if active && !self.tab_initialized {
+            self.tab_initialized = true;
             let selected_agent = self.selected_agent.clone();
             self.new_agent_thread(selected_agent, window, cx);
         }
