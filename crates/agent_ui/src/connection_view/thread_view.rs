@@ -528,16 +528,6 @@ impl ThreadView {
         thread.read(cx).is_imported()
     }
 
-    pub fn session_id(&self, cx: &App) -> Option<acp::SessionId> {
-        if let Some(thread) = self.thread() {
-            Some(thread.read(cx).session_id().clone())
-        } else {
-            self.resume_thread_metadata
-                .as_ref()
-                .map(|metadata| metadata.id.clone())
-        }
-    }
-
     // events
 
     pub fn handle_entry_view_event(
