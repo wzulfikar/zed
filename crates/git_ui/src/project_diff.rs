@@ -1438,9 +1438,9 @@ impl Render for ProjectDiffToolbar {
                         },
                     )
                     .map(|this| {
-                        if !cx.has_flag::<SplitDiffFeatureFlag>() {
-                            return this;
-                        }
+                        // if !cx.has_flag::<SplitDiffFeatureFlag>() {
+                        //     return this;
+                        // }
                         this.child(
                             Button::new(
                                 "toggle-split",

@@ -1,11 +1,11 @@
 use std::{cmp::Ordering, ops::Range, path::Path, rc::Rc, sync::Arc, time::Duration};
 
-use acp_thread::{AcpThread, AgentSessionInfo};
+use acp_thread::{AcpThread, AgentSessionInfo, ThreadStatus};
 use agent::{ContextServerRegistry, ThreadStore};
 use agent_servers::AgentServer;
 use db::kvp::{Dismissable, KEY_VALUE_STORE};
 use project::{
-    ExternalAgentServerName,
+    AgentServerStore, ExternalAgentServerName,
     agent_server_store::{CLAUDE_CODE_NAME, CODEX_NAME, GEMINI_NAME},
 };
 use serde::{Deserialize, Serialize};
@@ -77,6 +77,7 @@ use zed_actions::{
 const AGENT_PANEL_KEY: &str = "agent_panel";
 const RECENTLY_UPDATED_MENU_LIMIT: usize = 6;
 const DEFAULT_THREAD_TITLE: &str = "New Thread";
+const LOADING_SUMMARY_PLACEHOLDER: &str = "Loading Summary…";
 
 #[derive(Serialize, Deserialize, Debug)]
 struct SerializedAgentPanel {
@@ -1709,8 +1710,6 @@ impl Panel for AgentPanel {
 
 impl AgentPanel {
     fn render_title_view(&self, _window: &mut Window, cx: &Context<Self>) -> AnyElement {
-        const LOADING_SUMMARY_PLACEHOLDER: &str = "Loading Summary…";
-
         let content = match self.active_view() {
             ActiveView::ExternalAgentThread { thread_view } => {
                 let is_generating_title = thread_view
@@ -2516,6 +2515,21 @@ impl AgentPanel {
         }
     }
 
+    fn display_tab_label(text: SharedString, is_active: bool) -> (String, Option<SharedString>) {
+        const MAX_LABEL_LENGTH: usize = 30;
+        let label_text = if text.len() > MAX_LABEL_LENGTH {
+            format!("{}…", &text[..MAX_LABEL_LENGTH])
+        } else {
+            text.to_string()
+        };
+        let tooltip = if label_text != text.to_string() {
+            Some(text)
+        } else {
+            None
+        };
+        (label_text, tooltip)
+    }
+
     fn render_tab_label(
         &self,
         view: &ActiveView,
@@ -2532,7 +2546,7 @@ impl AgentPanel {
                     .filter(|text| !text.is_empty())
                     .unwrap_or_else(|| thread_view.read(cx).title(cx).to_string().into());
 
-                let (label_text, tooltip) = Self::display_tab_label(text, is_active);
+                let (label_text, tooltip) = Self::display_tab_label(text.into(), is_active);
 
                 let is_generating = thread_view
                     .read(cx)
@@ -2611,7 +2625,8 @@ impl AgentPanel {
                             if text.is_empty() {
                                 text = summary.text.clone().into();
                             }
-                            let (label_text, tooltip) = Self::display_tab_label(text, is_active);
+                            let (label_text, tooltip) =
+                                Self::display_tab_label(text.into(), is_active);
 
                             let label = if is_generating {
                                 Label::new(label_text)
@@ -2648,7 +2663,7 @@ impl AgentPanel {
                     }
                     TextThreadSummary::Error => {
                         let text = title_editor.read(cx).text(cx);
-                        let (label_text, tooltip) = Self::display_tab_label(text, is_active);
+                        let (label_text, tooltip) = Self::display_tab_label(text.into(), is_active);
 
                         let label = if is_generating {
                             Label::new(label_text)
@@ -2676,11 +2691,11 @@ impl AgentPanel {
                     }
                 }
             }
-            ActiveView::History => TabLabelRender {
+            ActiveView::History { .. } => TabLabelRender {
                 element: Label::new("History").truncate().into_any_element(),
                 tooltip: None,
             },
-            ActiveView::Configuration => TabLabelRender {
+            ActiveView::Uninitialized | ActiveView::Configuration => TabLabelRender {
                 element: Label::new("Settings").truncate().into_any_element(),
                 tooltip: None,
             },
@@ -2731,12 +2746,18 @@ impl AgentPanel {
     fn render_tab_bar(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let focus_handle = self.focus_handle(cx);
         let agent_server_store = self.project.read(cx).agent_server_store().clone();
-
-        let selected_agent = self.selected_agent.clone();
-        let is_agent_selected = move |agent_type: AgentType| selected_agent == agent_type;
-
         let workspace = self.workspace.clone();
         let is_via_collab = self.project.read(cx).is_via_collab();
+
+        // Get external agent names upfront to avoid borrow issues in closures
+        let external_agent_names: Vec<_> = agent_server_store
+            .read(cx)
+            .external_agents()
+            .filter(|name| {
+                name.0 != GEMINI_NAME && name.0 != CLAUDE_CODE_NAME && name.0 != CODEX_NAME
+            })
+            .cloned()
+            .collect();
 
         // Build the "new thread" menu
         let new_thread_menu = PopoverMenu::new("new_thread_menu")
@@ -2814,14 +2835,10 @@ impl AgentPanel {
                                         }
                                     }),
                             )
+                            .separator()
                             .header("External Agents")
                             .item(
                                 ContextMenuEntry::new("Claude Code CLI")
-                                    .when(is_agent_selected(AgentType::ClaudeCode), |this| {
-                                        this.action(Box::new(NewExternalAgentThread {
-                                            agent: None,
-                                        }))
-                                    })
                                     .icon(IconName::AiClaude)
                                     .disabled(is_via_collab)
                                     .icon_color(Color::Muted)
@@ -2848,11 +2865,6 @@ impl AgentPanel {
                             )
                             .item(
                                 ContextMenuEntry::new("Codex CLI")
-                                    .when(is_agent_selected(AgentType::Codex), |this| {
-                                        this.action(Box::new(NewExternalAgentThread {
-                                            agent: None,
-                                        }))
-                                    })
                                     .icon(IconName::AiOpenAi)
                                     .disabled(is_via_collab)
                                     .icon_color(Color::Muted)
@@ -2879,11 +2891,6 @@ impl AgentPanel {
                             )
                             .item(
                                 ContextMenuEntry::new("Gemini CLI")
-                                    .when(is_agent_selected(AgentType::Gemini), |this| {
-                                        this.action(Box::new(NewExternalAgentThread {
-                                            agent: None,
-                                        }))
-                                    })
                                     .icon(IconName::AiGemini)
                                     .icon_color(Color::Muted)
                                     .disabled(is_via_collab)
@@ -2908,75 +2915,6 @@ impl AgentPanel {
                                         }
                                     }),
                             )
-                            .map(|mut menu| {
-                                let agent_server_store = agent_server_store.read(cx);
-                                let agent_names = agent_server_store
-                                    .external_agents()
-                                    .filter(|name| {
-                                        name.0 != GEMINI_NAME
-                                            && name.0 != CLAUDE_CODE_NAME
-                                            && name.0 != CODEX_NAME
-                                    })
-                                    .cloned()
-                                    .collect::<Vec<_>>();
-
-                                for agent_name in agent_names {
-                                    let icon_path = agent_server_store.agent_icon(&agent_name);
-                                    let display_name = agent_server_store
-                                        .agent_display_name(&agent_name)
-                                        .unwrap_or_else(|| agent_name.0.clone());
-
-                                    let mut entry = ContextMenuEntry::new(display_name);
-
-                                    if let Some(icon_path) = icon_path {
-                                        entry = entry.custom_icon_svg(icon_path);
-                                    } else {
-                                        entry = entry.icon(IconName::Sparkle);
-                                    }
-                                    entry = entry
-                                        .when(
-                                            is_agent_selected(AgentType::Custom {
-                                                name: agent_name.0.clone(),
-                                            }),
-                                            |this| {
-                                                this.action(Box::new(NewExternalAgentThread {
-                                                    agent: None,
-                                                }))
-                                            },
-                                        )
-                                        .icon_color(Color::Muted)
-                                        .disabled(is_via_collab)
-                                        .handler({
-                                            let workspace = workspace.clone();
-                                            let agent_name = agent_name.clone();
-                                            move |window, cx| {
-                                                if let Some(workspace) = workspace.upgrade() {
-                                                    workspace.update(cx, |workspace, cx| {
-                                                        if let Some(panel) =
-                                                            workspace.panel::<AgentPanel>(cx)
-                                                        {
-                                                            panel.update(cx, |panel, cx| {
-                                                                panel.new_agent_thread(
-                                                                    AgentType::Custom {
-                                                                        name: agent_name
-                                                                            .clone()
-                                                                            .into(),
-                                                                    },
-                                                                    window,
-                                                                    cx,
-                                                                );
-                                                            });
-                                                        }
-                                                    });
-                                                }
-                                            }
-                                        });
-
-                                    menu = menu.item(entry);
-                                }
-
-                                menu
-                            })
                     }))
                 }
             });
