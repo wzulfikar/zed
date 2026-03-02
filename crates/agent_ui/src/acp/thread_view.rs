@@ -2134,6 +2134,7 @@ impl AcpThreadView {
                         }
                     });
                 }
+                cx.notify();
             }
             AcpThreadEvent::PromptCapabilitiesUpdated => {
                 self.prompt_capabilities
