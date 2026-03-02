@@ -2134,7 +2134,6 @@ impl AcpThreadView {
                         }
                     });
                 }
-                self.history.update(cx, |history, cx| history.refresh(cx));
             }
             AcpThreadEvent::PromptCapabilitiesUpdated => {
                 self.prompt_capabilities
