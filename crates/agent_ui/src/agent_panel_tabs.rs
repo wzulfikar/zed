@@ -7,12 +7,16 @@ use gpui::{
     prelude::FluentBuilder, AnyElement, InteractiveElement, IntoElement, ParentElement,
     SharedString, StatefulInteractiveElement, Styled, Window,
 };
-use ui::{Button, ButtonCommon, Color, Icon, IconName, IconSize, Label, LabelCommon, Tooltip};
-
-use crate::agent_panel::{ActiveView, AgentPanel};
-use crate::agent_panel_tabs_types::{
-    AgentPanelTab, AgentPanelTabIdentity, TabId, TabLabelRender,
+use theme::ActiveTheme;
+use ui::{
+    h_flex, ButtonCommon, Clickable, Color, Icon, IconButton, IconName, IconSize, Label,
+    LabelCommon, LabelSize, Tooltip, VisibleOnHover,
 };
+
+use project::ExternalAgentServerName;
+
+use crate::agent_panel::{ActiveView, AgentPanel, AgentType};
+use crate::agent_panel_tabs_types::{AgentPanelTab, AgentPanelTabIdentity, TabId, TabLabelRender};
 
 // ============== Tab Management Methods ==============
 
@@ -191,10 +195,8 @@ impl AgentPanel {
         _cx: &mut gpui::Context<Self>,
     ) {
         if self.title_edit_overlay_tab_id.is_some() {
-            // Close the title editor
             self.title_edit_overlay_tab_id = None;
         } else if self.tabs.get(self.active_tab_id).is_some() {
-            // Open the title editor for the active tab
             self.title_edit_overlay_tab_id = Some(self.active_tab_id);
         }
     }
@@ -239,142 +241,138 @@ impl AgentPanel {
                     Some(AgentPanelTabIdentity::AcpThread(id))
                 }),
             ActiveView::TextThread {
-                text_thread_editor, ..
-            } => {
-                // For text threads, we'd need to get the path
-                // This is a placeholder - actual implementation depends on TextThreadEditor
-                None
-            }
+                text_thread_editor: _,
+                ..
+            } => None,
             ActiveView::History { .. } | ActiveView::Configuration | ActiveView::Uninitialized => {
                 None
             }
         }
     }
 
-    /// Render the tab label
-    pub fn render_tab_label(
+    /// Render the tab label text
+    fn tab_label_text(
         &self,
         view: &ActiveView,
-        is_active: bool,
-        cx: &mut gpui::Context<Self>,
-    ) -> TabLabelRender {
+        cx: &gpui::App,
+    ) -> SharedString {
         match view {
-            ActiveView::AgentThread { server_view } => {
-                let text: SharedString = server_view.read(cx).title(cx);
-
-                let (label_text, tooltip) = Self::display_tab_label(text, is_active);
-
-                TabLabelRender {
-                    element: Label::new(label_text)
-                        .truncate()
-                        .when(!is_active, |label| label.color(Color::Muted))
-                        .into_any_element(),
-                    tooltip,
-                }
-            }
-            ActiveView::TextThread { .. } => {
-                TabLabelRender {
-                    element: Label::new("Text Thread")
-                        .truncate()
-                        .when(!is_active, |label| label.color(Color::Muted))
-                        .into_any_element(),
-                    tooltip: None,
-                }
-            }
-            ActiveView::History { .. } => TabLabelRender {
-                element: Label::new("History")
-                    .truncate()
-                    .when(!is_active, |label| label.color(Color::Muted))
-                    .into_any_element(),
-                tooltip: None,
-            },
-            ActiveView::Configuration => TabLabelRender {
-                element: Label::new("Settings")
-                    .truncate()
-                    .when(!is_active, |label| label.color(Color::Muted))
-                    .into_any_element(),
-                tooltip: None,
-            },
-            ActiveView::Uninitialized => TabLabelRender {
-                element: Label::new("Loading...")
-                    .truncate()
-                    .when(!is_active, |label| label.color(Color::Muted))
-                    .into_any_element(),
-                tooltip: None,
-            },
+            ActiveView::AgentThread { server_view } => server_view.read(cx).title(cx),
+            ActiveView::TextThread { .. } => "Text Thread".into(),
+            ActiveView::History { .. } => "History".into(),
+            ActiveView::Configuration => "Settings".into(),
+            ActiveView::Uninitialized => "Loading...".into(),
         }
     }
 
-    /// Render the agent icon for a tab
-    pub fn render_tab_agent_icon(
+    /// Render the agent icon for a tab, using the same icon source as the toolbar menu
+    fn render_tab_agent_icon(
         &self,
-        index: usize,
-        agent: &crate::agent_panel::AgentType,
-        _cx: &mut gpui::Context<Self>,
+        agent: &AgentType,
+        cx: &gpui::App,
     ) -> AnyElement {
-        if let Some(icon) = agent.icon() {
-            gpui::div()
-                .id(("agent-tab-agent-icon", index))
-                .px(gpui::px(4.0))
-                .child(Icon::new(icon))
-                .into_any_element()
-        } else {
-            gpui::div()
-                .id(("agent-tab-agent-icon", index))
-                .into_any_element()
+        let agent_server_store = self.project.read(cx).agent_server_store().clone();
+        let store = agent_server_store.read(cx);
+
+        match agent {
+            AgentType::Custom { name, .. } => {
+                let external_icon = store.agent_icon(&ExternalAgentServerName(name.clone()));
+                if let Some(icon_path) = external_icon {
+                    Icon::from_external_svg(icon_path)
+                        .color(Color::Muted)
+                        .size(IconSize::Small)
+                        .into_any_element()
+                } else {
+                    Icon::new(IconName::Sparkle)
+                        .color(Color::Muted)
+                        .size(IconSize::Small)
+                        .into_any_element()
+                }
+            }
+            AgentType::NativeAgent => Icon::new(IconName::ZedAgent)
+                .color(Color::Muted)
+                .size(IconSize::Small)
+                .into_any_element(),
+            AgentType::TextThread => Icon::new(IconName::TextThread)
+                .color(Color::Muted)
+                .size(IconSize::Small)
+                .into_any_element(),
         }
     }
 
-    /// Render the tab bar
+    /// Render the tab bar that replaces the title area in the toolbar.
+    /// This is called from `render_toolbar` and fits inline where the title used to be.
     pub fn render_tab_bar(&self, _window: &mut Window, cx: &mut gpui::Context<Self>) -> AnyElement {
-        // Render tabs
+        let can_close = self.tabs.len() > 1;
+        let active_bg = cx.theme().colors().tab_active_background;
+        let hover_bg = cx.theme().colors().ghost_element_hover;
+
         let tabs: Vec<AnyElement> = self
             .tabs
             .iter()
             .enumerate()
             .map(|(index, tab): (usize, &AgentPanelTab)| {
                 let is_active = index == self.active_tab_id;
-                let _is_title_editing = self.title_edit_overlay_tab_id == Some(index);
 
-                // Get the label
-                let label = self.render_tab_label(tab.view(), is_active, cx);
+                let label_text = self.tab_label_text(tab.view(), cx);
+                let (display_text, _tooltip_text) =
+                    Self::display_tab_label(label_text, is_active);
 
-                // Get the agent icon
-                let icon = self.render_tab_agent_icon(index, tab.agent(), cx);
+                let icon = self.render_tab_agent_icon(tab.agent(), cx);
 
-                // Build the tab element
-                let tab_id = index;
-                gpui::div()
-                    .id(("agent-tab", tab_id))
-                    .flex_1()
-                    .h(gpui::px(32.0))
-                    .justify_center()
+                let close_button = if can_close {
+                    Some(
+                        IconButton::new(("tab-close", index), IconName::Close)
+                            .icon_size(IconSize::XSmall)
+                            .visible_on_hover("agent-tab-hover")
+                            .tooltip(Tooltip::text("Close Tab"))
+                            .on_click(cx.listener(move |this, _event, window, cx| {
+                                this.remove_tab_by_id(index, window, cx);
+                                cx.notify();
+                            })),
+                    )
+                } else {
+                    None
+                };
+
+                h_flex()
+                    .id(("agent-tab", index))
+                    .group("agent-tab-hover")
+                    .h_full()
+                    .px_2()
+                    .gap_1()
                     .items_center()
-                    .gap_x(gpui::px(4.0))
-                    .on_click(move |_event, window, cx| {
-                        // This will be handled by the parent
-                        // The click handling will be done via set_active_tab_by_id
-                    })
+                    .cursor_pointer()
+                    .rounded_md()
+                    .when(is_active, |this| this.bg(active_bg))
+                    .hover(|style| style.bg(hover_bg))
+                    .on_click(cx.listener(move |this, _event, window, cx| {
+                        if this.active_tab_id == index {
+                            this.toggle_active_tab_title_editor(window, cx);
+                        } else {
+                            this.set_active_tab_by_id(index, window, cx);
+                        }
+                        cx.notify();
+                    }))
                     .child(icon)
-                    .child(label.element)
+                    .child(
+                        Label::new(display_text)
+                            .size(LabelSize::Small)
+                            .truncate()
+                            .when(!is_active, |label| label.color(Color::Muted)),
+                    )
+                    .children(close_button)
                     .into_any_element()
             })
             .collect();
 
-        // Render the "new tab" button
-        let new_tab_button = Button::new("new-tab-btn", "+")
-            .icon(IconName::Plus)
-            .icon_size(IconSize::Small)
-            .tooltip(Tooltip::text("New Thread…"));
-
-        gpui::div()
+        h_flex()
             .id("agent-panel-tab-bar")
-            .w_full()
-            .h(gpui::px(36.0))
-            .flex()
-            .items_center()
+            .flex_grow()
+            .h_full()
+            .overflow_x_scroll()
+            .gap_0p5()
             .children(tabs)
-            .child(new_tab_button)
             .into_any_element()
     }
 }

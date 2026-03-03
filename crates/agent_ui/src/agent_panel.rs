@@ -499,7 +499,7 @@ pub struct AgentPanel {
     /// Workspace id is used as a database key
     workspace_id: Option<WorkspaceId>,
     user_store: Entity<UserStore>,
-    project: Entity<Project>,
+    pub(crate) project: Entity<Project>,
     fs: Arc<dyn Fs>,
     language_registry: Arc<LanguageRegistry>,
     acp_history: Entity<ThreadHistory>,
@@ -2782,7 +2782,12 @@ impl AgentPanel {
                         }
                         _ => selected_agent.into_any_element(),
                     })
-                    .child(self.render_title_view(window, cx)),
+                    .when(self.tabs.is_empty(), |this| {
+                        this.child(self.render_title_view(window, cx))
+                    })
+                    .when(!self.tabs.is_empty(), |this| {
+                        this.child(self.render_tab_bar(window, cx))
+                    }),
             )
             .child(
                 h_flex()
@@ -3233,10 +3238,6 @@ impl Render for AgentPanel {
                 }
             }))
             .child(self.render_toolbar(window, cx))
-            // Tab bar - show tabs when we have them
-            .when(!self.tabs.is_empty(), |this| {
-                this.child(self.render_tab_bar(window, cx))
-            })
             .children(self.render_workspace_trust_message(cx))
             .children(self.render_onboarding(window, cx))
             .map(|parent| {
