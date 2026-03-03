@@ -456,6 +456,8 @@ pub mod agent {
             ResetAgentZoom,
             /// Pastes clipboard content without any formatting.
             PasteRaw,
+            /// Closes the currently active thread tab in the agent panel.
+            CloseActiveThreadTab,
         ]
     );
 
