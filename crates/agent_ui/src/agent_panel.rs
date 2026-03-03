@@ -532,19 +532,12 @@ pub struct AgentPanel {
     on_boarding_upsell_dismissed: AtomicBool,
 
     // Tab-related fields (for agent tabs feature)
-    #[allow(dead_code)]
     pub(crate) tabs: Vec<crate::agent_panel_tabs_types::AgentPanelTab>,
-    #[allow(dead_code)]
     pub(crate) active_tab_id: crate::agent_panel_tabs_types::TabId,
-    #[allow(dead_code)]
     pub(crate) tab_bar_scroll_handle: gpui::ScrollHandle,
-    #[allow(dead_code)]
     pub(crate) title_edit_overlay_tab_id: Option<crate::agent_panel_tabs_types::TabId>,
-    #[allow(dead_code)]
     pub(crate) overlay_view: Option<ActiveView>,
-    #[allow(dead_code)]
     pub(crate) overlay_previous_tab_id: Option<crate::agent_panel_tabs_types::TabId>,
-    #[allow(dead_code)]
     pub(crate) pending_tab_removal: Option<crate::agent_panel_tabs_types::TabId>,
     pub(crate) title_editor_blur_subscription: Option<Subscription>,
 }
