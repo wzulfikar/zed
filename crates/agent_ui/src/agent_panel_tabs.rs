@@ -318,6 +318,7 @@ impl AgentPanel {
         TabLabelRender {
             element: div()
                 .flex_1()
+                .min_w_0()
                 .child(
                     Label::new(display_text)
                         .size(LabelSize::Small)
@@ -447,6 +448,7 @@ impl AgentPanel {
                     .h_full()
                     .min_w(gpui::px(114.0))
                     .max_w(gpui::px(180.0))
+                    .overflow_hidden()
                     .pl_2()
                     .pr_1()
                     .gap_1()

@@ -1217,6 +1217,12 @@ impl AgentPanel {
     }
 
     pub fn go_back(&mut self, _: &workspace::GoBack, window: &mut Window, cx: &mut Context<Self>) {
+        if self.overlay_view.is_some() {
+            self.overlay_view = None;
+            self.overlay_previous_tab_id = None;
+            cx.notify();
+            return;
+        }
         match self.active_view {
             ActiveView::Configuration | ActiveView::History { .. } => {
                 if let Some(previous_view) = self.previous_view.take() {
@@ -2817,6 +2823,9 @@ impl AgentPanel {
                         matches!(
                             &self.active_view,
                             ActiveView::History { .. } | ActiveView::Configuration
+                        ) || matches!(
+                            &self.overlay_view,
+                            Some(ActiveView::History { .. }) | Some(ActiveView::Configuration)
                         ),
                         |this| this.child(self.render_toolbar_back_button(cx).into_any_element()),
                     )
@@ -3314,7 +3323,9 @@ impl Render for AgentPanel {
                 }
 
                 let view_to_render = if !self.tabs.is_empty() {
-                    self.tabs.get(self.active_tab_id).map(|tab| tab.view())
+                    self.overlay_view
+                        .as_ref()
+                        .or_else(|| self.tabs.get(self.active_tab_id).map(|tab| tab.view()))
                 } else {
                     None
                 };
