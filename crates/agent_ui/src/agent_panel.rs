@@ -1973,6 +1973,36 @@ impl AgentPanel {
 
 impl Focusable for AgentPanel {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
+        // When tabs are in use, active_view is not kept in sync with tab switches.
+        // Use the overlay or the active tab's view directly so focus-related logic
+        // (e.g. zoom, key dispatch) targets the element actually on screen.
+        if !self.tabs.is_empty() {
+            if let Some(overlay) = &self.overlay_view {
+                return match overlay {
+                    ActiveView::History { kind } => match kind {
+                        HistoryKind::AgentThreads => self.acp_history.focus_handle(cx),
+                        HistoryKind::TextThreads => self.text_thread_history.focus_handle(cx),
+                    },
+                    ActiveView::Configuration => self
+                        .configuration
+                        .as_ref()
+                        .map(|c| c.focus_handle(cx))
+                        .unwrap_or_else(|| self.focus_handle.clone()),
+                    _ => self.focus_handle.clone(),
+                };
+            }
+            if let Some(tab) = self.tabs.get(self.active_tab_id) {
+                return match tab.view() {
+                    ActiveView::AgentThread { server_view } => server_view.focus_handle(cx),
+                    ActiveView::TextThread {
+                        text_thread_editor, ..
+                    } => text_thread_editor.focus_handle(cx),
+                    _ => self.focus_handle.clone(),
+                };
+            }
+            return self.focus_handle.clone();
+        }
+
         match &self.active_view {
             ActiveView::Uninitialized => self.focus_handle.clone(),
             ActiveView::AgentThread { server_view, .. } => server_view.focus_handle(cx),
