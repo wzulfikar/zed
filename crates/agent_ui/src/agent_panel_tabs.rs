@@ -4,9 +4,11 @@
 //! It is kept in a separate file to minimize merge conflicts with upstream.
 
 use gpui::{
-    AnyElement, Focusable, InteractiveElement, IntoElement, ParentElement, SharedString,
-    StatefulInteractiveElement, Styled, Window, div, prelude::FluentBuilder,
+    AnimationExt, AnyElement, Animation, Focusable, InteractiveElement, IntoElement, ParentElement,
+    SharedString, StatefulInteractiveElement, Styled, Window, div, prelude::FluentBuilder,
+    pulsating_between,
 };
+use std::time::Duration;
 use theme::ActiveTheme;
 use ui::{
     ButtonCommon, Clickable, Color, Icon, IconButton, IconName, IconSize, Label, LabelCommon,
@@ -324,26 +326,48 @@ impl AgentPanel {
     }
 
     /// Render the agent icon for a tab. Only shows icons for external agents.
-    fn render_tab_agent_icon(&self, agent: &AgentType, cx: &gpui::App) -> Option<AnyElement> {
+    fn render_tab_agent_icon(
+        &self,
+        tab: &AgentPanelTab,
+        cx: &gpui::App,
+    ) -> Option<AnyElement> {
+        let agent = tab.agent();
+        let is_loading = if let ActiveView::AgentThread { server_view } = tab.view() {
+            server_view.read(cx).is_loading()
+        } else {
+            false
+        };
+
         match agent {
             AgentType::Custom { name, .. } => {
                 let agent_server_store = self.project.read(cx).agent_server_store().clone();
                 let store = agent_server_store.read(cx);
                 let external_icon = store.agent_icon(&ExternalAgentServerName(name.clone()));
-                if let Some(icon_path) = external_icon {
+                let icon = if let Some(icon_path) = external_icon {
+                    Icon::from_external_svg(icon_path)
+                        .color(Color::Muted)
+                        .size(IconSize::Small)
+                } else {
+                    Icon::new(IconName::Sparkle)
+                        .color(Color::Muted)
+                        .size(IconSize::Small)
+                };
+
+                if is_loading {
                     Some(
-                        Icon::from_external_svg(icon_path)
-                            .color(Color::Muted)
-                            .size(IconSize::Small)
+                        div()
+                            .child(icon)
+                            .with_animation(
+                                "pulsating-icon",
+                                Animation::new(Duration::from_secs(1))
+                                    .repeat()
+                                    .with_easing(pulsating_between(0.2, 0.6)),
+                                |div, delta| div.opacity(delta),
+                            )
                             .into_any_element(),
                     )
                 } else {
-                    Some(
-                        Icon::new(IconName::Sparkle)
-                            .color(Color::Muted)
-                            .size(IconSize::Small)
-                            .into_any_element(),
-                    )
+                    Some(icon.into_any_element())
                 }
             }
             AgentType::NativeAgent | AgentType::TextThread => None,
@@ -402,7 +426,7 @@ impl AgentPanel {
             .map(|(index, tab): (usize, &AgentPanelTab)| {
                 let is_active = index == self.active_tab_id;
                 let label = self.render_tab_label(tab.view(), is_active, cx);
-                let icon = self.render_tab_agent_icon(tab.agent(), cx);
+                let icon = self.render_tab_agent_icon(tab, cx);
 
                 let close_button = Some(
                     div().when(!can_close, |this| this.invisible()).child(
@@ -438,10 +462,18 @@ impl AgentPanel {
                             this.set_active_tab_by_id(index, window, cx);
                         }
                         cx.notify();
-                    }))
-                    .children(icon)
-                    .child(label.element.when(icon.is_none(), |this| this.pl_2()))
-                    .children(close_button);
+                    }));
+
+                let tab_element = if icon.is_some() {
+                    tab_element
+                        .children(icon)
+                        .child(label.element)
+                } else {
+                    tab_element
+                        .child(div().pl_2().child(label.element))
+                };
+
+                let tab_element = tab_element.children(close_button);
 
                 if let Some(tooltip_text) = label.tooltip {
                     tab_element
