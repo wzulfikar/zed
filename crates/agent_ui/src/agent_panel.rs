@@ -1152,6 +1152,25 @@ impl AgentPanel {
             return;
         };
 
+        if !self.tabs.is_empty() {
+            // When tabs exist, history is shown as an overlay rather than replacing active_view.
+            if let Some(ActiveView::History { kind: active_kind }) = &self.overlay_view {
+                if *active_kind == kind {
+                    self.overlay_view = None;
+                    self.overlay_previous_tab_id = None;
+                    cx.notify();
+                    return;
+                }
+            }
+            if kind == HistoryKind::AgentThreads {
+                self.acp_history
+                    .update(cx, |history, cx| history.refresh_full_history(cx));
+            }
+            self.push_tab(ActiveView::History { kind }, self.selected_agent.clone(), window, cx);
+            cx.notify();
+            return;
+        }
+
         if let ActiveView::History { kind: active_kind } = self.active_view {
             if active_kind == kind {
                 if let Some(previous_view) = self.previous_view.take() {
@@ -2076,6 +2095,30 @@ impl AgentPanel {
     fn render_title_view(&self, _window: &mut Window, cx: &Context<Self>) -> AnyElement {
         const LOADING_SUMMARY_PLACEHOLDER: &str = "Loading Summary…";
 
+        // When an overlay (history or config) is active over the tab bar, show its title.
+        if let Some(overlay) = &self.overlay_view {
+            let content: AnyElement = match overlay {
+                ActiveView::History { kind } => {
+                    let title = match kind {
+                        HistoryKind::AgentThreads => "History",
+                        HistoryKind::TextThreads => "Text Thread History",
+                    };
+                    Label::new(title).truncate().into_any_element()
+                }
+                ActiveView::Configuration => Label::new("Settings").truncate().into_any_element(),
+                _ => Label::new("").into_any_element(),
+            };
+            return h_flex()
+                .key_context("TitleEditor")
+                .id("TitleEditor")
+                .flex_grow()
+                .w_full()
+                .max_w_full()
+                .overflow_x_scroll()
+                .child(content)
+                .into_any();
+        }
+
         let content = match &self.active_view {
             ActiveView::AgentThread { server_view } => {
                 let is_generating_title = server_view
@@ -2818,7 +2861,7 @@ impl AgentPanel {
                     .flex_1()
                     .min_w_0()
                     .gap(DynamicSpacing::Base04.rems(cx))
-                    .when(!has_tabs, |this| this.pl(DynamicSpacing::Base04.rems(cx)))
+                    .when(!has_tabs || self.overlay_view.is_some(), |this| this.pl(DynamicSpacing::Base04.rems(cx)))
                     .when(
                         matches!(
                             &self.active_view,
@@ -2837,10 +2880,10 @@ impl AgentPanel {
                             ),
                         |this| this.child(selected_agent.into_any_element()),
                     )
-                    .when(self.tabs.is_empty(), |this| {
+                    .when(self.tabs.is_empty() || self.overlay_view.is_some(), |this| {
                         this.child(self.render_title_view(window, cx))
                     })
-                    .when(!self.tabs.is_empty(), |this| {
+                    .when(!self.tabs.is_empty() && self.overlay_view.is_none(), |this| {
                         this.child(self.render_tab_bar(window, cx))
                     }),
             )
