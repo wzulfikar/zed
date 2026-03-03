@@ -924,6 +924,17 @@ impl AgentPanel {
     }
 
     pub(crate) fn active_thread_view(&self) -> Option<&Entity<ConnectionView>> {
+        // When tabs exist, use the active tab's view instead of active_view
+        if !self.tabs.is_empty() {
+            return self
+                .tabs
+                .get(self.active_tab_id)
+                .and_then(|tab| match tab.view() {
+                    ActiveView::AgentThread { server_view, .. } => Some(server_view),
+                    _ => None,
+                });
+        }
+
         match &self.active_view {
             ActiveView::AgentThread { server_view, .. } => Some(server_view),
             ActiveView::Uninitialized
@@ -1598,6 +1609,19 @@ impl AgentPanel {
     }
 
     pub(crate) fn active_text_thread_editor(&self) -> Option<Entity<TextThreadEditor>> {
+        // When tabs exist, use the active tab's view instead of active_view
+        if !self.tabs.is_empty() {
+            return self
+                .tabs
+                .get(self.active_tab_id)
+                .and_then(|tab| match tab.view() {
+                    ActiveView::TextThread {
+                        text_thread_editor, ..
+                    } => Some(text_thread_editor.clone()),
+                    _ => None,
+                });
+        }
+
         match &self.active_view {
             ActiveView::TextThread {
                 text_thread_editor, ..
@@ -1631,14 +1655,26 @@ impl AgentPanel {
 
         // Clone the view for tab tracking before consuming new_view
         let tab_view = match &new_view {
-            ActiveView::AgentThread { server_view } => {
-                Some((
-                    ActiveView::AgentThread {
-                        server_view: server_view.clone(),
-                    },
-                    self.selected_agent.clone(),
-                ))
-            }
+            ActiveView::AgentThread { server_view } => Some((
+                ActiveView::AgentThread {
+                    server_view: server_view.clone(),
+                },
+                self.selected_agent.clone(),
+            )),
+            ActiveView::TextThread {
+                text_thread_editor,
+                title_editor,
+                buffer_search_bar,
+                _subscriptions: _,
+            } => Some((
+                ActiveView::TextThread {
+                    text_thread_editor: text_thread_editor.clone(),
+                    title_editor: title_editor.clone(),
+                    buffer_search_bar: buffer_search_bar.clone(),
+                    _subscriptions: Vec::new(),
+                },
+                AgentType::TextThread,
+            )),
             _ => None,
         };
 
@@ -2776,17 +2812,13 @@ impl AgentPanel {
                     .flex_1()
                     .min_w_0()
                     .gap(DynamicSpacing::Base04.rems(cx))
-                    .when(!has_tabs, |this| {
-                        this.pl(DynamicSpacing::Base04.rems(cx))
-                    })
+                    .when(!has_tabs, |this| this.pl(DynamicSpacing::Base04.rems(cx)))
                     .when(
                         matches!(
                             &self.active_view,
                             ActiveView::History { .. } | ActiveView::Configuration
                         ),
-                        |this| {
-                            this.child(self.render_toolbar_back_button(cx).into_any_element())
-                        },
+                        |this| this.child(self.render_toolbar_back_button(cx).into_any_element()),
                     )
                     .when(
                         self.tabs.is_empty()
@@ -2811,8 +2843,7 @@ impl AgentPanel {
                     .pl(DynamicSpacing::Base04.rems(cx))
                     .pr(DynamicSpacing::Base06.rems(cx))
                     .when(has_tabs, |this| {
-                        this.border_b_1()
-                            .border_color(cx.theme().colors().border)
+                        this.border_b_1().border_color(cx.theme().colors().border)
                     })
                     .child(new_thread_menu)
                     .when(show_history_menu, |this| {
