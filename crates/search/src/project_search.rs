@@ -68,6 +68,8 @@ actions!(
     ]
 );
 
+const SEARCH_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(400);
+
 fn split_glob_patterns(text: &str) -> Vec<&str> {
     let mut patterns = Vec::new();
     let mut pattern_start = 0;
@@ -266,6 +268,7 @@ pub struct ProjectSearchView {
     replace_enabled: bool,
     included_opened_only: bool,
     regex_language: Option<Arc<Language>>,
+    pending_search_debounce: Option<Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -866,16 +869,17 @@ impl ProjectSearchView {
         // Subscribe to query_editor in order to reraise editor events for workspace item activation purposes
         subscriptions.push(
             cx.subscribe(&query_editor, |this, _, event: &EditorEvent, cx| {
-                if let EditorEvent::Edited { .. } = event
-                    && EditorSettings::get_global(cx).use_smartcase_search
-                {
-                    let query = this.search_query_text(cx);
-                    if !query.is_empty()
-                        && this.search_options.contains(SearchOptions::CASE_SENSITIVE)
-                            != contains_uppercase(&query)
-                    {
-                        this.toggle_search_option(SearchOptions::CASE_SENSITIVE, cx);
+                if let EditorEvent::Edited { .. } = event {
+                    if EditorSettings::get_global(cx).use_smartcase_search {
+                        let query = this.search_query_text(cx);
+                        if !query.is_empty()
+                            && this.search_options.contains(SearchOptions::CASE_SENSITIVE)
+                                != contains_uppercase(&query)
+                        {
+                            this.toggle_search_option(SearchOptions::CASE_SENSITIVE, cx);
+                        }
                     }
+                    this.search_debounce(cx);
                 }
                 cx.emit(ViewEvent::EditorEvent(event.clone()))
             }),
@@ -983,6 +987,7 @@ impl ProjectSearchView {
             replace_enabled: false,
             included_opened_only: false,
             regex_language: None,
+            pending_search_debounce: None,
             _subscriptions: subscriptions,
         };
 
@@ -1221,6 +1226,7 @@ impl ProjectSearchView {
     }
 
     fn search(&mut self, cx: &mut Context<Self>) {
+        self.pending_search_debounce.take();
         let open_buffers = if self.included_opened_only {
             self.workspace
                 .update(cx, |workspace, cx| self.open_buffers(cx, workspace))
@@ -1231,6 +1237,14 @@ impl ProjectSearchView {
         if let Some(query) = self.build_search_query(cx, open_buffers) {
             self.entity.update(cx, |model, cx| model.search(query, cx));
         }
+    }
+
+    fn search_debounce(&mut self, cx: &mut Context<Self>) {
+        self.pending_search_debounce.take();
+        self.pending_search_debounce = Some(cx.spawn(async move |view, cx| {
+            cx.background_executor().timer(SEARCH_DEBOUNCE).await;
+            view.update(cx, |this, cx| this.search(cx)).ok();
+        }));
     }
 
     pub fn search_query_text(&self, cx: &App) -> String {
@@ -1514,9 +1528,11 @@ impl ProjectSearchView {
                     editor.scroll(Point::default(), Some(Axis::Vertical), window, cx);
                 }
             });
-            if is_new_search && self.query_editor.focus_handle(cx).is_focused(window) {
-                self.focus_results_editor(window, cx);
-            }
+            // Original code moves focus to results after a new search. With live search enabled,
+            // this is disruptive (cursor jumps away while typing) so we commented it.
+            // if is_new_search && self.query_editor.focus_handle(cx).is_focused(window) {
+            //     self.focus_results_editor(window, cx);
+            // }
         }
 
         cx.emit(ViewEvent::UpdateTab);
