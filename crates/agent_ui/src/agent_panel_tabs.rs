@@ -440,7 +440,7 @@ impl AgentPanel {
                         cx.notify();
                     }))
                     .children(icon)
-                    .child(label.element)
+                    .child(label.element.when(icon.is_none(), |this| this.pl_2()))
                     .children(close_button);
 
                 if let Some(tooltip_text) = label.tooltip {
