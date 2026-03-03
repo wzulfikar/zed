@@ -446,7 +446,7 @@ impl AgentPanel {
                     .id(("agent-tab", index))
                     .group("agent-tab-hover")
                     .h_full()
-                    .min_w(gpui::px(114.0))
+                    .min_w(gpui::px(130.0))
                     .max_w(gpui::px(180.0))
                     .overflow_hidden()
                     .pl_2()
