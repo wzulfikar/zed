@@ -268,7 +268,7 @@ pub struct ProjectSearchView {
     replace_enabled: bool,
     included_opened_only: bool,
     regex_language: Option<Arc<Language>>,
-    pending_search_debounce: Option<Task<Option<()>>>,
+    pending_search_debounce: Option<Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -1226,6 +1226,7 @@ impl ProjectSearchView {
     }
 
     fn search(&mut self, cx: &mut Context<Self>) {
+        self.pending_search_debounce.take();
         let open_buffers = if self.included_opened_only {
             self.workspace
                 .update(cx, |workspace, cx| self.open_buffers(cx, workspace))
@@ -1243,7 +1244,6 @@ impl ProjectSearchView {
         self.pending_search_debounce = Some(cx.spawn(async move |view, cx| {
             cx.background_executor().timer(SEARCH_DEBOUNCE).await;
             view.update(cx, |this, cx| this.search(cx)).ok();
-            None
         }));
     }
 
