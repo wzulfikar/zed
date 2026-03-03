@@ -4,8 +4,8 @@
 //! It is kept in a separate file to minimize merge conflicts with upstream.
 
 use gpui::{
-    AnyElement, FluentBuilder, InteractiveElement, IntoElement, ParentElement, SharedString, Styled,
-    Window,
+    prelude::FluentBuilder, AnyElement, InteractiveElement, IntoElement, ParentElement,
+    SharedString, StatefulInteractiveElement, Styled, Window,
 };
 use ui::{Button, ButtonCommon, Color, Icon, IconName, IconSize, Label, LabelCommon, Tooltip};
 
@@ -85,7 +85,7 @@ impl AgentPanel {
             self.serialize(cx);
         }
 
-        self.focus_handle(cx).focus(window, cx);
+        self.focus_handle.focus(window, cx);
     }
 
     /// Set an overlay view (like History or Configuration)
@@ -98,7 +98,7 @@ impl AgentPanel {
         self.title_edit_overlay_tab_id = None;
         self.overlay_previous_tab_id = Some(self.active_tab_id);
         self.overlay_view = Some(view);
-        self.focus_handle(cx).focus(window, cx);
+        self.focus_handle.focus(window, cx);
     }
 
     /// Push a new tab
@@ -187,8 +187,8 @@ impl AgentPanel {
     /// Toggle title editor for the active tab
     pub fn toggle_active_tab_title_editor(
         &mut self,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
+        _window: &mut Window,
+        _cx: &mut gpui::Context<Self>,
     ) {
         if self.title_edit_overlay_tab_id.is_some() {
             // Close the title editor
