@@ -546,6 +546,7 @@ pub struct AgentPanel {
     pub(crate) overlay_previous_tab_id: Option<crate::agent_panel_tabs_types::TabId>,
     #[allow(dead_code)]
     pub(crate) pending_tab_removal: Option<crate::agent_panel_tabs_types::TabId>,
+    pub(crate) title_editor_blur_subscription: Option<Subscription>,
 }
 
 impl AgentPanel {
@@ -843,6 +844,7 @@ impl AgentPanel {
             overlay_view: None,
             overlay_previous_tab_id: None,
             pending_tab_removal: None,
+            title_editor_blur_subscription: None,
         };
 
         // Initial sync of agent servers from extensions
@@ -2771,11 +2773,9 @@ impl AgentPanel {
             .max_w_full()
             .flex_none()
             .justify_between()
-            .gap_2()
+            .when(!has_tabs, |this| this.gap_2())
             .bg(cx.theme().colors().tab_bar_background)
             .border_color(cx.theme().colors().border)
-            // When tabs are shown, inactive tabs provide the bottom border line;
-            // the toolbar's own border_b would cause a double line under inactive tabs.
             .when(!has_tabs, |this| this.border_b_1())
             .child(
                 h_flex()
@@ -2813,9 +2813,14 @@ impl AgentPanel {
             .child(
                 h_flex()
                     .flex_none()
+                    .h_full()
                     .gap(DynamicSpacing::Base02.rems(cx))
                     .pl(DynamicSpacing::Base04.rems(cx))
                     .pr(DynamicSpacing::Base06.rems(cx))
+                    .when(has_tabs, |this| {
+                        this.border_b_1()
+                            .border_color(cx.theme().colors().border)
+                    })
                     .child(new_thread_menu)
                     .when(show_history_menu, |this| {
                         this.child(self.render_recent_entries_menu(
