@@ -57,7 +57,7 @@ use fs::Fs;
 use gpui::{
     Action, Animation, AnimationExt, AnyElement, App, AsyncWindowContext, ClipboardItem, Corner,
     DismissEvent, Entity, EventEmitter, ExternalPaths, FocusHandle, Focusable, KeyContext, Pixels,
-    Subscription, Task, UpdateGlobal, WeakEntity, prelude::*, pulsating_between,
+    ScrollHandle, Subscription, Task, UpdateGlobal, WeakEntity, prelude::*, pulsating_between,
 };
 use language::LanguageRegistry;
 use language_model::{ConfigurationError, LanguageModelRegistry};
@@ -336,7 +336,7 @@ enum HistoryKind {
     TextThreads,
 }
 
-enum ActiveView {
+pub(crate) enum ActiveView {
     Uninitialized,
     AgentThread {
         server_view: Entity<ConnectionView>,
@@ -371,14 +371,14 @@ pub enum AgentType {
 }
 
 impl AgentType {
-    fn label(&self) -> SharedString {
+    pub(crate) fn label(&self) -> SharedString {
         match self {
             Self::NativeAgent | Self::TextThread => "Zed Agent".into(),
             Self::Custom { name, .. } => name.into(),
         }
     }
 
-    fn icon(&self) -> Option<IconName> {
+    pub(crate) fn icon(&self) -> Option<IconName> {
         match self {
             Self::NativeAgent | Self::TextThread => None,
             Self::Custom { .. } => Some(IconName::Sparkle),
@@ -510,7 +510,7 @@ pub struct AgentPanel {
     context_server_registry: Entity<ContextServerRegistry>,
     configuration: Option<Entity<AgentConfiguration>>,
     configuration_subscription: Option<Subscription>,
-    focus_handle: FocusHandle,
+    pub(crate) focus_handle: FocusHandle,
     active_view: ActiveView,
     previous_view: Option<ActiveView>,
     _active_view_observation: Option<Subscription>,
@@ -524,14 +524,30 @@ pub struct AgentPanel {
     zoomed: bool,
     pending_serialization: Option<Task<Result<()>>>,
     onboarding: Entity<AgentPanelOnboarding>,
-    selected_agent: AgentType,
+    pub(crate) selected_agent: AgentType,
     show_trust_workspace_message: bool,
     last_configuration_error_telemetry: Option<String>,
     on_boarding_upsell_dismissed: AtomicBool,
+
+    // Tab-related fields (for agent tabs feature)
+    #[allow(dead_code)]
+    pub(crate) tabs: Vec<crate::agent_panel_tabs_types::AgentPanelTab>,
+    #[allow(dead_code)]
+    pub(crate) active_tab_id: crate::agent_panel_tabs_types::TabId,
+    #[allow(dead_code)]
+    pub(crate) tab_bar_scroll_handle: gpui::ScrollHandle,
+    #[allow(dead_code)]
+    pub(crate) title_edit_overlay_tab_id: Option<crate::agent_panel_tabs_types::TabId>,
+    #[allow(dead_code)]
+    pub(crate) overlay_view: Option<ActiveView>,
+    #[allow(dead_code)]
+    pub(crate) overlay_previous_tab_id: Option<crate::agent_panel_tabs_types::TabId>,
+    #[allow(dead_code)]
+    pub(crate) pending_tab_removal: Option<crate::agent_panel_tabs_types::TabId>,
 }
 
 impl AgentPanel {
-    fn serialize(&mut self, cx: &mut App) {
+    pub(crate) fn serialize(&mut self, cx: &mut App) {
         let Some(workspace_id) = self.workspace_id else {
             return;
         };
@@ -816,6 +832,15 @@ impl AgentPanel {
             show_trust_workspace_message: false,
             last_configuration_error_telemetry: None,
             on_boarding_upsell_dismissed: AtomicBool::new(OnboardingUpsell::dismissed()),
+
+            // Tab fields
+            tabs: Vec::new(),
+            active_tab_id: 0,
+            tab_bar_scroll_handle: ScrollHandle::new(),
+            title_edit_overlay_tab_id: None,
+            overlay_view: None,
+            overlay_previous_tab_id: None,
+            pending_tab_removal: None,
         };
 
         // Initial sync of agent servers from extensions
@@ -1607,6 +1632,19 @@ impl AgentPanel {
         let current_is_special = current_is_history || current_is_config;
         let new_is_special = new_is_history || new_is_config;
 
+        // Clone the view for tab tracking before consuming new_view
+        let tab_view = match &new_view {
+            ActiveView::AgentThread { server_view } => {
+                Some((
+                    ActiveView::AgentThread {
+                        server_view: server_view.clone(),
+                    },
+                    self.selected_agent.clone(),
+                ))
+            }
+            _ => None,
+        };
+
         if current_is_uninitialized || (current_is_special && !new_is_special) {
             self.active_view = new_view;
         } else if !current_is_special && new_is_special {
@@ -1643,6 +1681,10 @@ impl AgentPanel {
 
         if focus {
             self.focus_handle(cx).focus(window, cx);
+        }
+
+        if let Some((view, agent_type)) = tab_view {
+            self.push_tab(view, agent_type, window, cx);
         }
         cx.emit(AgentPanelEvent::ActiveViewChanged);
     }
@@ -3191,18 +3233,40 @@ impl Render for AgentPanel {
                 }
             }))
             .child(self.render_toolbar(window, cx))
+            // Tab bar - show tabs when we have them
+            .when(!self.tabs.is_empty(), |this| {
+                this.child(self.render_tab_bar(window, cx))
+            })
             .children(self.render_workspace_trust_message(cx))
             .children(self.render_onboarding(window, cx))
             .map(|parent| {
-                // Emit configuration error telemetry before entering the match to avoid borrow conflicts
-                if matches!(&self.active_view, ActiveView::TextThread { .. }) {
+                // Determine the active view - prefer tab's view if tabs exist
+                let is_text_thread = if !self.tabs.is_empty() {
+                    self.tabs
+                        .get(self.active_tab_id)
+                        .map(|tab| matches!(tab.view(), ActiveView::TextThread { .. }))
+                        .unwrap_or(false)
+                } else {
+                    matches!(self.active_view, ActiveView::TextThread { .. })
+                };
+
+                // Emit configuration error telemetry before borrowing the view
+                if is_text_thread {
                     let model_registry = LanguageModelRegistry::read_global(cx);
                     let configuration_error =
                         model_registry.configuration_error(model_registry.default_model(), cx);
                     self.emit_configuration_error_telemetry_if_needed(configuration_error.as_ref());
                 }
 
-                match &self.active_view {
+                let view_to_render = if !self.tabs.is_empty() {
+                    self.tabs.get(self.active_tab_id).map(|tab| tab.view())
+                } else {
+                    None
+                };
+
+                let active_view = view_to_render.unwrap_or(&self.active_view);
+
+                match active_view {
                     ActiveView::Uninitialized => parent,
                     ActiveView::AgentThread { server_view, .. } => parent
                         .child(server_view.clone())
