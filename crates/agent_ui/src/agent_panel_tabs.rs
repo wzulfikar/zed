@@ -4,7 +4,7 @@
 //! It is kept in a separate file to minimize merge conflicts with upstream.
 
 use gpui::{
-    AnimationExt, AnyElement, Animation, Focusable, InteractiveElement, IntoElement, ParentElement,
+    Animation, AnimationExt, AnyElement, Focusable, InteractiveElement, IntoElement, ParentElement,
     SharedString, StatefulInteractiveElement, Styled, Window, div, prelude::FluentBuilder,
     pulsating_between,
 };
@@ -316,21 +316,22 @@ impl AgentPanel {
         let (display_text, tooltip) = Self::display_tab_label(title, is_active);
 
         TabLabelRender {
-            element: Label::new(display_text)
-                .size(LabelSize::Small)
-                .truncate()
-                .when(!is_active, |label| label.color(Color::Muted))
+            element: div()
+                .flex_1()
+                .min_w_0()
+                .child(
+                    Label::new(display_text)
+                        .size(LabelSize::Small)
+                        .truncate()
+                        .when(!is_active, |label| label.color(Color::Muted)),
+                )
                 .into_any_element(),
             tooltip,
         }
     }
 
     /// Render the agent icon for a tab. Only shows icons for external agents.
-    fn render_tab_agent_icon(
-        &self,
-        tab: &AgentPanelTab,
-        cx: &gpui::App,
-    ) -> Option<AnyElement> {
+    fn render_tab_agent_icon(&self, tab: &AgentPanelTab, cx: &gpui::App) -> Option<AnyElement> {
         let agent = tab.agent();
         let is_loading = if let ActiveView::AgentThread { server_view } = tab.view() {
             server_view.read(cx).is_loading()
@@ -445,12 +446,13 @@ impl AgentPanel {
                     .id(("agent-tab", index))
                     .group("agent-tab-hover")
                     .h_full()
-                    .min_w(gpui::px(100.0))
+                    .min_w(gpui::px(114.0))
                     .max_w(gpui::px(180.0))
-                    .px_1()
+                    .overflow_hidden()
+                    .pl_2()
+                    .pr_1()
                     .gap_1()
                     .items_center()
-                    .justify_between()
                     .cursor_pointer()
                     .border_color(border_color)
                     .border_r_1()
@@ -467,13 +469,12 @@ impl AgentPanel {
                 let tab_element = if icon.is_some() {
                     tab_element
                         .children(icon)
-                        .child(label.element)
+                        .child(div().pl_1().child(label.element))
                 } else {
-                    tab_element
-                        .child(div().pl_2().child(label.element))
+                    tab_element.child(label.element)
                 };
 
-                let tab_element = tab_element.children(close_button);
+                let tab_element = tab_element.child(div().ml_auto().children(close_button));
 
                 if let Some(tooltip_text) = label.tooltip {
                     tab_element
@@ -508,6 +509,7 @@ impl AgentPanel {
                 h_flex()
                     .id("agent-panel-tab-bar")
                     .h_full()
+                    .min_w_0()
                     .overflow_x_scroll()
                     .children(tabs),
             )

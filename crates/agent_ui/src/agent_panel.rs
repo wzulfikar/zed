@@ -924,6 +924,17 @@ impl AgentPanel {
     }
 
     pub(crate) fn active_thread_view(&self) -> Option<&Entity<ConnectionView>> {
+        // When tabs exist, use the active tab's view instead of active_view
+        if !self.tabs.is_empty() {
+            return self
+                .tabs
+                .get(self.active_tab_id)
+                .and_then(|tab| match tab.view() {
+                    ActiveView::AgentThread { server_view, .. } => Some(server_view),
+                    _ => None,
+                });
+        }
+
         match &self.active_view {
             ActiveView::AgentThread { server_view, .. } => Some(server_view),
             ActiveView::Uninitialized
@@ -1141,6 +1152,25 @@ impl AgentPanel {
             return;
         };
 
+        if !self.tabs.is_empty() {
+            // When tabs exist, history is shown as an overlay rather than replacing active_view.
+            if let Some(ActiveView::History { kind: active_kind }) = &self.overlay_view {
+                if *active_kind == kind {
+                    self.overlay_view = None;
+                    self.overlay_previous_tab_id = None;
+                    cx.notify();
+                    return;
+                }
+            }
+            if kind == HistoryKind::AgentThreads {
+                self.acp_history
+                    .update(cx, |history, cx| history.refresh_full_history(cx));
+            }
+            self.push_tab(ActiveView::History { kind }, self.selected_agent.clone(), window, cx);
+            cx.notify();
+            return;
+        }
+
         if let ActiveView::History { kind: active_kind } = self.active_view {
             if active_kind == kind {
                 if let Some(previous_view) = self.previous_view.take() {
@@ -1206,6 +1236,12 @@ impl AgentPanel {
     }
 
     pub fn go_back(&mut self, _: &workspace::GoBack, window: &mut Window, cx: &mut Context<Self>) {
+        if self.overlay_view.is_some() {
+            self.overlay_view = None;
+            self.overlay_previous_tab_id = None;
+            cx.notify();
+            return;
+        }
         match self.active_view {
             ActiveView::Configuration | ActiveView::History { .. } => {
                 if let Some(previous_view) = self.previous_view.take() {
@@ -1598,6 +1634,19 @@ impl AgentPanel {
     }
 
     pub(crate) fn active_text_thread_editor(&self) -> Option<Entity<TextThreadEditor>> {
+        // When tabs exist, use the active tab's view instead of active_view
+        if !self.tabs.is_empty() {
+            return self
+                .tabs
+                .get(self.active_tab_id)
+                .and_then(|tab| match tab.view() {
+                    ActiveView::TextThread {
+                        text_thread_editor, ..
+                    } => Some(text_thread_editor.clone()),
+                    _ => None,
+                });
+        }
+
         match &self.active_view {
             ActiveView::TextThread {
                 text_thread_editor, ..
@@ -1631,14 +1680,26 @@ impl AgentPanel {
 
         // Clone the view for tab tracking before consuming new_view
         let tab_view = match &new_view {
-            ActiveView::AgentThread { server_view } => {
-                Some((
-                    ActiveView::AgentThread {
-                        server_view: server_view.clone(),
-                    },
-                    self.selected_agent.clone(),
-                ))
-            }
+            ActiveView::AgentThread { server_view } => Some((
+                ActiveView::AgentThread {
+                    server_view: server_view.clone(),
+                },
+                self.selected_agent.clone(),
+            )),
+            ActiveView::TextThread {
+                text_thread_editor,
+                title_editor,
+                buffer_search_bar,
+                _subscriptions: _,
+            } => Some((
+                ActiveView::TextThread {
+                    text_thread_editor: text_thread_editor.clone(),
+                    title_editor: title_editor.clone(),
+                    buffer_search_bar: buffer_search_bar.clone(),
+                    _subscriptions: Vec::new(),
+                },
+                AgentType::TextThread,
+            )),
             _ => None,
         };
 
@@ -1912,6 +1973,36 @@ impl AgentPanel {
 
 impl Focusable for AgentPanel {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
+        // When tabs are in use, active_view is not kept in sync with tab switches.
+        // Use the overlay or the active tab's view directly so focus-related logic
+        // (e.g. zoom, key dispatch) targets the element actually on screen.
+        if !self.tabs.is_empty() {
+            if let Some(overlay) = &self.overlay_view {
+                return match overlay {
+                    ActiveView::History { kind } => match kind {
+                        HistoryKind::AgentThreads => self.acp_history.focus_handle(cx),
+                        HistoryKind::TextThreads => self.text_thread_history.focus_handle(cx),
+                    },
+                    ActiveView::Configuration => self
+                        .configuration
+                        .as_ref()
+                        .map(|c| c.focus_handle(cx))
+                        .unwrap_or_else(|| self.focus_handle.clone()),
+                    _ => self.focus_handle.clone(),
+                };
+            }
+            if let Some(tab) = self.tabs.get(self.active_tab_id) {
+                return match tab.view() {
+                    ActiveView::AgentThread { server_view } => server_view.focus_handle(cx),
+                    ActiveView::TextThread {
+                        text_thread_editor, ..
+                    } => text_thread_editor.focus_handle(cx),
+                    _ => self.focus_handle.clone(),
+                };
+            }
+            return self.focus_handle.clone();
+        }
+
         match &self.active_view {
             ActiveView::Uninitialized => self.focus_handle.clone(),
             ActiveView::AgentThread { server_view, .. } => server_view.focus_handle(cx),
@@ -2033,6 +2124,30 @@ impl Panel for AgentPanel {
 impl AgentPanel {
     fn render_title_view(&self, _window: &mut Window, cx: &Context<Self>) -> AnyElement {
         const LOADING_SUMMARY_PLACEHOLDER: &str = "Loading Summary…";
+
+        // When an overlay (history or config) is active over the tab bar, show its title.
+        if let Some(overlay) = &self.overlay_view {
+            let content: AnyElement = match overlay {
+                ActiveView::History { kind } => {
+                    let title = match kind {
+                        HistoryKind::AgentThreads => "History",
+                        HistoryKind::TextThreads => "Text Thread History",
+                    };
+                    Label::new(title).truncate().into_any_element()
+                }
+                ActiveView::Configuration => Label::new("Settings").truncate().into_any_element(),
+                _ => Label::new("").into_any_element(),
+            };
+            return h_flex()
+                .key_context("TitleEditor")
+                .id("TitleEditor")
+                .flex_grow()
+                .w_full()
+                .max_w_full()
+                .overflow_x_scroll()
+                .child(content)
+                .into_any();
+        }
 
         let content = match &self.active_view {
             ActiveView::AgentThread { server_view } => {
@@ -2776,17 +2891,16 @@ impl AgentPanel {
                     .flex_1()
                     .min_w_0()
                     .gap(DynamicSpacing::Base04.rems(cx))
-                    .when(!has_tabs, |this| {
-                        this.pl(DynamicSpacing::Base04.rems(cx))
-                    })
+                    .when(!has_tabs || self.overlay_view.is_some(), |this| this.pl(DynamicSpacing::Base04.rems(cx)))
                     .when(
                         matches!(
                             &self.active_view,
                             ActiveView::History { .. } | ActiveView::Configuration
+                        ) || matches!(
+                            &self.overlay_view,
+                            Some(ActiveView::History { .. }) | Some(ActiveView::Configuration)
                         ),
-                        |this| {
-                            this.child(self.render_toolbar_back_button(cx).into_any_element())
-                        },
+                        |this| this.child(self.render_toolbar_back_button(cx).into_any_element()),
                     )
                     .when(
                         self.tabs.is_empty()
@@ -2796,10 +2910,10 @@ impl AgentPanel {
                             ),
                         |this| this.child(selected_agent.into_any_element()),
                     )
-                    .when(self.tabs.is_empty(), |this| {
+                    .when(self.tabs.is_empty() || self.overlay_view.is_some(), |this| {
                         this.child(self.render_title_view(window, cx))
                     })
-                    .when(!self.tabs.is_empty(), |this| {
+                    .when(!self.tabs.is_empty() && self.overlay_view.is_none(), |this| {
                         this.child(self.render_tab_bar(window, cx))
                     }),
             )
@@ -2811,8 +2925,7 @@ impl AgentPanel {
                     .pl(DynamicSpacing::Base04.rems(cx))
                     .pr(DynamicSpacing::Base06.rems(cx))
                     .when(has_tabs, |this| {
-                        this.border_b_1()
-                            .border_color(cx.theme().colors().border)
+                        this.border_b_1().border_color(cx.theme().colors().border)
                     })
                     .child(new_thread_menu)
                     .when(show_history_menu, |this| {
@@ -3283,7 +3396,9 @@ impl Render for AgentPanel {
                 }
 
                 let view_to_render = if !self.tabs.is_empty() {
-                    self.tabs.get(self.active_tab_id).map(|tab| tab.view())
+                    self.overlay_view
+                        .as_ref()
+                        .or_else(|| self.tabs.get(self.active_tab_id).map(|tab| tab.view()))
                 } else {
                     None
                 };
