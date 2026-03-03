@@ -22,7 +22,9 @@ use project::{
 use serde::{Deserialize, Serialize};
 use settings::{LanguageModelProviderSetting, LanguageModelSelection};
 
-use zed_actions::agent::{OpenClaudeAgentOnboardingModal, ReauthenticateAgent, ReviewBranchDiff};
+use zed_actions::agent::{
+    CloseActiveThreadTab, OpenClaudeAgentOnboardingModal, ReauthenticateAgent, ReviewBranchDiff,
+};
 
 use crate::ui::{AcpOnboardingModal, ClaudeCodeOnboardingModal};
 use crate::{
@@ -2761,6 +2763,8 @@ impl AgentPanel {
 
         let show_history_menu = self.history_kind_for_selected_agent(cx).is_some();
 
+        let has_tabs = !self.tabs.is_empty();
+
         h_flex()
             .id("agent-panel-toolbar")
             .h(Tab::container_height(cx))
@@ -2769,19 +2773,36 @@ impl AgentPanel {
             .justify_between()
             .gap_2()
             .bg(cx.theme().colors().tab_bar_background)
-            .border_b_1()
             .border_color(cx.theme().colors().border)
+            // When tabs are shown, inactive tabs provide the bottom border line;
+            // the toolbar's own border_b would cause a double line under inactive tabs.
+            .when(!has_tabs, |this| this.border_b_1())
             .child(
                 h_flex()
-                    .size_full()
+                    .h_full()
+                    .flex_1()
+                    .min_w_0()
                     .gap(DynamicSpacing::Base04.rems(cx))
-                    .pl(DynamicSpacing::Base04.rems(cx))
-                    .child(match &self.active_view {
-                        ActiveView::History { .. } | ActiveView::Configuration => {
-                            self.render_toolbar_back_button(cx).into_any_element()
-                        }
-                        _ => selected_agent.into_any_element(),
+                    .when(!has_tabs, |this| {
+                        this.pl(DynamicSpacing::Base04.rems(cx))
                     })
+                    .when(
+                        matches!(
+                            &self.active_view,
+                            ActiveView::History { .. } | ActiveView::Configuration
+                        ),
+                        |this| {
+                            this.child(self.render_toolbar_back_button(cx).into_any_element())
+                        },
+                    )
+                    .when(
+                        self.tabs.is_empty()
+                            && !matches!(
+                                &self.active_view,
+                                ActiveView::History { .. } | ActiveView::Configuration
+                            ),
+                        |this| this.child(selected_agent.into_any_element()),
+                    )
                     .when(self.tabs.is_empty(), |this| {
                         this.child(self.render_title_view(window, cx))
                     })
@@ -3232,6 +3253,10 @@ impl Render for AgentPanel {
             .on_action(cx.listener(Self::decrease_font_size))
             .on_action(cx.listener(Self::reset_font_size))
             .on_action(cx.listener(Self::toggle_zoom))
+            .on_action(cx.listener(|this, _: &CloseActiveThreadTab, window, cx| {
+                this.remove_tab_by_id(this.active_tab_id, window, cx);
+                cx.notify();
+            }))
             .on_action(cx.listener(|this, _: &ReauthenticateAgent, window, cx| {
                 if let Some(thread_view) = this.active_thread_view() {
                     thread_view.update(cx, |thread_view, cx| thread_view.reauthenticate(window, cx))

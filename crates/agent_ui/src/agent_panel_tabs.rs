@@ -4,7 +4,7 @@
 //! It is kept in a separate file to minimize merge conflicts with upstream.
 
 use gpui::{
-    prelude::FluentBuilder, AnyElement, InteractiveElement, IntoElement, ParentElement,
+    prelude::FluentBuilder, AnyElement, Focusable, InteractiveElement, IntoElement, ParentElement,
     SharedString, StatefulInteractiveElement, Styled, Window,
 };
 use theme::ActiveTheme;
@@ -13,6 +13,8 @@ use ui::{
     LabelCommon, LabelSize, Tooltip, VisibleOnHover,
 };
 
+use editor;
+use menu;
 use project::ExternalAgentServerName;
 
 use crate::agent_panel::{ActiveView, AgentPanel, AgentType};
@@ -65,17 +67,20 @@ impl AgentPanel {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        let Some((tab_agent, _text_thread_editor)) = self.tabs.get(new_id).map(|tab| {
-            let editor = match tab.view() {
-                ActiveView::TextThread {
-                    text_thread_editor, ..
-                } => Some(text_thread_editor.clone()),
-                _ => None,
-            };
-            (tab.agent().clone(), editor)
-        }) else {
+        let Some(tab) = self.tabs.get(new_id) else {
             log::info!("The input new_id is not in the list views!");
             return;
+        };
+
+        let tab_agent = tab.agent().clone();
+        let view_focus_handle = match tab.view() {
+            ActiveView::TextThread {
+                text_thread_editor, ..
+            } => Some(text_thread_editor.focus_handle(cx)),
+            ActiveView::AgentThread { server_view, .. } => {
+                Some(server_view.focus_handle(cx))
+            }
+            _ => None,
         };
 
         self.overlay_view = None;
@@ -89,7 +94,11 @@ impl AgentPanel {
             self.serialize(cx);
         }
 
-        self.focus_handle.focus(window, cx);
+        if let Some(handle) = view_focus_handle {
+            handle.focus(window, cx);
+        } else {
+            self.focus_handle.focus(window, cx);
+        }
     }
 
     /// Set an overlay view (like History or Configuration)
@@ -191,13 +200,40 @@ impl AgentPanel {
     /// Toggle title editor for the active tab
     pub fn toggle_active_tab_title_editor(
         &mut self,
-        _window: &mut Window,
-        _cx: &mut gpui::Context<Self>,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
     ) {
         if self.title_edit_overlay_tab_id.is_some() {
             self.title_edit_overlay_tab_id = None;
-        } else if self.tabs.get(self.active_tab_id).is_some() {
+            if let Some(tab) = self.tabs.get(self.active_tab_id) {
+                let focus = match tab.view() {
+                    ActiveView::TextThread {
+                        text_thread_editor, ..
+                    } => Some(text_thread_editor.focus_handle(cx)),
+                    ActiveView::AgentThread { server_view } => {
+                        Some(server_view.focus_handle(cx))
+                    }
+                    _ => None,
+                };
+                if let Some(handle) = focus {
+                    handle.focus(window, cx);
+                }
+            }
+        } else if let Some(tab) = self.tabs.get(self.active_tab_id) {
             self.title_edit_overlay_tab_id = Some(self.active_tab_id);
+            let title_editor_focus = match tab.view() {
+                ActiveView::AgentThread { server_view } => server_view
+                    .read(cx)
+                    .parent_thread(cx)
+                    .map(|r| r.read(cx).title_editor.focus_handle(cx)),
+                ActiveView::TextThread { title_editor, .. } => {
+                    Some(title_editor.focus_handle(cx))
+                }
+                _ => None,
+            };
+            if let Some(handle) = title_editor_focus {
+                handle.focus(window, cx);
+            }
         }
     }
 
@@ -250,62 +286,109 @@ impl AgentPanel {
         }
     }
 
-    /// Render the tab label text
-    fn tab_label_text(
+    /// Render the tab label with truncation and optional tooltip for long titles
+    fn render_tab_label(
         &self,
         view: &ActiveView,
+        is_active: bool,
         cx: &gpui::App,
-    ) -> SharedString {
-        match view {
-            ActiveView::AgentThread { server_view } => server_view.read(cx).title(cx),
+    ) -> TabLabelRender {
+        let title: SharedString = match view {
+            ActiveView::AgentThread { server_view } => server_view
+                .read(cx)
+                .active_thread()
+                .map(|tv| tv.read(cx).thread.read(cx).title())
+                .unwrap_or_else(|| server_view.read(cx).title(cx)),
             ActiveView::TextThread { .. } => "Text Thread".into(),
             ActiveView::History { .. } => "History".into(),
             ActiveView::Configuration => "Settings".into(),
             ActiveView::Uninitialized => "Loading...".into(),
+        };
+
+        let (display_text, tooltip) = Self::display_tab_label(title, is_active);
+
+        TabLabelRender {
+            element: Label::new(display_text)
+                .size(LabelSize::Small)
+                .truncate()
+                .when(!is_active, |label| label.color(Color::Muted))
+                .into_any_element(),
+            tooltip,
         }
     }
 
-    /// Render the agent icon for a tab, using the same icon source as the toolbar menu
+    /// Render the agent icon for a tab. Only shows icons for external agents.
     fn render_tab_agent_icon(
         &self,
         agent: &AgentType,
         cx: &gpui::App,
-    ) -> AnyElement {
-        let agent_server_store = self.project.read(cx).agent_server_store().clone();
-        let store = agent_server_store.read(cx);
-
+    ) -> Option<AnyElement> {
         match agent {
             AgentType::Custom { name, .. } => {
+                let agent_server_store = self.project.read(cx).agent_server_store().clone();
+                let store = agent_server_store.read(cx);
                 let external_icon = store.agent_icon(&ExternalAgentServerName(name.clone()));
                 if let Some(icon_path) = external_icon {
-                    Icon::from_external_svg(icon_path)
-                        .color(Color::Muted)
-                        .size(IconSize::Small)
-                        .into_any_element()
+                    Some(
+                        Icon::from_external_svg(icon_path)
+                            .color(Color::Muted)
+                            .size(IconSize::Small)
+                            .into_any_element(),
+                    )
                 } else {
-                    Icon::new(IconName::Sparkle)
-                        .color(Color::Muted)
-                        .size(IconSize::Small)
-                        .into_any_element()
+                    Some(
+                        Icon::new(IconName::Sparkle)
+                            .color(Color::Muted)
+                            .size(IconSize::Small)
+                            .into_any_element(),
+                    )
                 }
             }
-            AgentType::NativeAgent => Icon::new(IconName::ZedAgent)
-                .color(Color::Muted)
-                .size(IconSize::Small)
-                .into_any_element(),
-            AgentType::TextThread => Icon::new(IconName::TextThread)
-                .color(Color::Muted)
-                .size(IconSize::Small)
-                .into_any_element(),
+            AgentType::NativeAgent | AgentType::TextThread => None,
         }
     }
 
     /// Render the tab bar that replaces the title area in the toolbar.
     /// This is called from `render_toolbar` and fits inline where the title used to be.
     pub fn render_tab_bar(&self, _window: &mut Window, cx: &mut gpui::Context<Self>) -> AnyElement {
+        if let Some(editing_tab_id) = self.title_edit_overlay_tab_id {
+            if let Some(tab) = self.tabs.get(editing_tab_id) {
+                let title_editor: Option<gpui::AnyView> = match tab.view() {
+                    ActiveView::AgentThread { server_view } => server_view
+                        .read(cx)
+                        .parent_thread(cx)
+                        .map(|thread| thread.read(cx).title_editor.clone().into()),
+                    ActiveView::TextThread { title_editor, .. } => {
+                        Some(title_editor.clone().into())
+                    }
+                    _ => None,
+                };
+
+                if let Some(editor_view) = title_editor {
+                    return h_flex()
+                        .key_context("TitleEditor")
+                        .flex_grow()
+                        .w_full()
+                        .on_action(cx.listener(|this, _: &menu::Confirm, window, cx| {
+                            this.toggle_active_tab_title_editor(window, cx);
+                            cx.notify();
+                        }))
+                        .on_action(
+                            cx.listener(|this, _: &editor::actions::Cancel, window, cx| {
+                                this.toggle_active_tab_title_editor(window, cx);
+                                cx.notify();
+                            }),
+                        )
+                        .child(editor_view)
+                        .into_any_element();
+                }
+            }
+        }
+
         let can_close = self.tabs.len() > 1;
         let active_bg = cx.theme().colors().tab_active_background;
         let hover_bg = cx.theme().colors().ghost_element_hover;
+        let border_color = cx.theme().colors().border;
 
         let tabs: Vec<AnyElement> = self
             .tabs
@@ -313,11 +396,7 @@ impl AgentPanel {
             .enumerate()
             .map(|(index, tab): (usize, &AgentPanelTab)| {
                 let is_active = index == self.active_tab_id;
-
-                let label_text = self.tab_label_text(tab.view(), cx);
-                let (display_text, _tooltip_text) =
-                    Self::display_tab_label(label_text, is_active);
-
+                let label = self.render_tab_label(tab.view(), is_active, cx);
                 let icon = self.render_tab_agent_icon(tab.agent(), cx);
 
                 let close_button = if can_close {
@@ -335,16 +414,19 @@ impl AgentPanel {
                     None
                 };
 
-                h_flex()
+                let tab_element = h_flex()
                     .id(("agent-tab", index))
                     .group("agent-tab-hover")
                     .h_full()
+                    .max_w(gpui::px(180.0))
                     .px_2()
                     .gap_1()
                     .items_center()
                     .cursor_pointer()
-                    .rounded_md()
-                    .when(is_active, |this| this.bg(active_bg))
+                    .border_color(border_color)
+                    .border_r_1()
+                    .when(is_active, |this| this.bg(active_bg).border_l_1())
+                    .when(!is_active, |this| this.border_b_1())
                     .hover(|style| style.bg(hover_bg))
                     .on_click(cx.listener(move |this, _event, window, cx| {
                         if this.active_tab_id == index {
@@ -354,15 +436,17 @@ impl AgentPanel {
                         }
                         cx.notify();
                     }))
-                    .child(icon)
-                    .child(
-                        Label::new(display_text)
-                            .size(LabelSize::Small)
-                            .truncate()
-                            .when(!is_active, |label| label.color(Color::Muted)),
-                    )
-                    .children(close_button)
-                    .into_any_element()
+                    .children(icon)
+                    .child(label.element)
+                    .children(close_button);
+
+                if let Some(tooltip_text) = label.tooltip {
+                    tab_element
+                        .tooltip(Tooltip::text(tooltip_text))
+                        .into_any_element()
+                } else {
+                    tab_element.into_any_element()
+                }
             })
             .collect();
 
@@ -371,7 +455,6 @@ impl AgentPanel {
             .flex_grow()
             .h_full()
             .overflow_x_scroll()
-            .gap_0p5()
             .children(tabs)
             .into_any_element()
     }
