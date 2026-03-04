@@ -1143,6 +1143,11 @@ impl ConnectionView {
         matches!(self.server_state, ServerState::Loading { .. })
     }
 
+    pub fn is_generating(&self, cx: &App) -> bool {
+        self.active_thread()
+            .is_some_and(|thread| thread.read(cx).thread.read(cx).status() != ThreadStatus::Idle)
+    }
+
     fn update_turn_tokens(&mut self, cx: &mut Context<Self>) {
         if let Some(active) = self.active_thread() {
             active.update(cx, |active, cx| {

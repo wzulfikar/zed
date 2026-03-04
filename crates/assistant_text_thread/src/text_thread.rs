@@ -1232,6 +1232,10 @@ impl TextThread {
         self.token_count
     }
 
+    pub fn is_generating(&self) -> bool {
+        !self.pending_completions.is_empty()
+    }
+
     pub(crate) fn count_remaining_tokens(&mut self, cx: &mut Context<Self>) {
         // Assume it will be a Chat request, even though that takes fewer tokens (and risks going over the limit),
         // because otherwise you see in the UI that your empty message has a bunch of tokens already used.
