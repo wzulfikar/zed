@@ -336,9 +336,14 @@ function upload_debug_symbols() {
 
 upload_debug_symbols
 
-cp target/${target_triple}/${target_dir}/zed "${app_path}/Contents/MacOS/zed"
-cp target/${target_triple}/${target_dir}/cli "${app_path}/Contents/MacOS/cli"
+TARGET_BASE_DIR=target/${target_triple}
+if [ -n "${CARGO_TARGET_DIR:-}" ]; then
+    TARGET_BASE_DIR="${CARGO_TARGET_DIR}/${TARGET_BASE_DIR}"
+fi
+
+cp "${TARGET_BASE_DIR}/${target_dir}/zed" "${app_path}/Contents/MacOS/zed"
+cp "${TARGET_BASE_DIR}/${target_dir}/cli" "${app_path}/Contents/MacOS/cli"
 sign_app_binaries
 
-sign_binary "target/$target_triple/release/remote_server"
-gzip -f --stdout --best target/$target_triple/release/remote_server >target/zed-remote-server-macos-$arch_suffix.gz
+sign_binary "${TARGET_BASE_DIR}/release/remote_server"
+gzip -f --stdout --best "${TARGET_BASE_DIR}/release/remote_server" >target/zed-remote-server-macos-$arch_suffix.gz
