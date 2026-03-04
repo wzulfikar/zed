@@ -330,7 +330,6 @@ impl AgentPanel {
 
         let element = if is_generating {
             div()
-                .flex_1()
                 .min_w_0()
                 .child(label)
                 .with_animation(
@@ -342,7 +341,7 @@ impl AgentPanel {
                 )
                 .into_any_element()
         } else {
-            div().flex_1().min_w_0().child(label).into_any_element()
+            div().min_w_0().child(label).into_any_element()
         };
 
         TabLabelRender { element, tooltip }
@@ -487,12 +486,12 @@ impl AgentPanel {
                 let tab_element = if icon.is_some() {
                     tab_element
                         .children(icon)
-                        .child(div().pl_1().child(label.element))
+                        .child(div().pl_1().flex_1().min_w_0().child(label.element))
                 } else {
-                    tab_element.child(label.element)
+                    tab_element.child(div().flex_1().min_w_0().child(label.element))
                 };
 
-                let tab_element = tab_element.child(div().ml_auto().children(close_button));
+                let tab_element = tab_element.child(div().children(close_button));
 
                 if let Some(tooltip_text) = label.tooltip {
                     tab_element
