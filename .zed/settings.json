@@ -44,6 +44,8 @@
         "procMacro": {
           "processes": 4,
         },
+        "check": { "workspace": false },
+        "rust": { "analyzerTargetDir": true },
       },
     },
   },
