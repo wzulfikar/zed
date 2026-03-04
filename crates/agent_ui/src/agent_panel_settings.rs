@@ -3,7 +3,7 @@
 //! Handles showing the Settings (Configuration) panel as a tab overlay when tabs are active.
 //! It is kept in a separate file to minimize merge conflicts with upstream.
 
-use gpui::Window;
+use gpui::{AppContext, Focusable, Window};
 
 use crate::{
     agent_configuration::{AgentConfiguration, AssistantConfigurationEvent},

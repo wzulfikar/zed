@@ -497,21 +497,21 @@ impl ActiveView {
 }
 
 pub struct AgentPanel {
-    workspace: WeakEntity<Workspace>,
+    pub(crate) workspace: WeakEntity<Workspace>,
     /// Workspace id is used as a database key
     workspace_id: Option<WorkspaceId>,
     user_store: Entity<UserStore>,
     pub(crate) project: Entity<Project>,
-    fs: Arc<dyn Fs>,
-    language_registry: Arc<LanguageRegistry>,
+    pub(crate) fs: Arc<dyn Fs>,
+    pub(crate) language_registry: Arc<LanguageRegistry>,
     acp_history: Entity<ThreadHistory>,
     text_thread_history: Entity<TextThreadHistory>,
     thread_store: Entity<ThreadStore>,
     text_thread_store: Entity<assistant_text_thread::TextThreadStore>,
     prompt_store: Option<Entity<PromptStore>>,
-    context_server_registry: Entity<ContextServerRegistry>,
-    configuration: Option<Entity<AgentConfiguration>>,
-    configuration_subscription: Option<Subscription>,
+    pub(crate) context_server_registry: Entity<ContextServerRegistry>,
+    pub(crate) configuration: Option<Entity<AgentConfiguration>>,
+    pub(crate) configuration_subscription: Option<Subscription>,
     pub(crate) focus_handle: FocusHandle,
     active_view: ActiveView,
     previous_view: Option<ActiveView>,
@@ -1561,7 +1561,7 @@ impl AgentPanel {
         .detach_and_log_err(cx);
     }
 
-    fn handle_agent_configuration_event(
+    pub(crate) fn handle_agent_configuration_event(
         &mut self,
         _entity: &Entity<AgentConfiguration>,
         event: &AssistantConfigurationEvent,
