@@ -78,10 +78,17 @@ impl AgentPanel {
             ActiveView::TextThread {
                 text_thread_editor, ..
             } => Some(text_thread_editor.focus_handle(cx)),
-            ActiveView::AgentThread { server_view, .. } => server_view
-                .read(cx)
-                .active_thread()
-                .map(|thread| thread.read(cx).active_editor(cx).focus_handle(cx)),
+            ActiveView::AgentThread { server_view, .. } => {
+                let server_view = server_view.read(cx);
+                if server_view.is_loading() {
+                    // Focus eager editor when connection is still loading
+                    Some(server_view.eager_editor().focus_handle(cx))
+                } else {
+                    server_view
+                        .active_thread()
+                        .map(|thread| thread.read(cx).active_editor(cx).focus_handle(cx))
+                }
+            }
             _ => None,
         };
 
@@ -140,6 +147,18 @@ impl AgentPanel {
                 self.tabs.push(AgentPanelTab::new(new_view, agent));
                 let new_id = self.tabs.len() - 1;
                 self.set_active_tab_by_id(new_id, window, cx);
+
+                // Scroll to show the new tab (at the rightmost position)
+                // Use defer to ensure layout is computed before scrolling
+                let scroll_handle = self.tab_bar_scroll_handle.clone();
+                window.defer(cx, move |window, cx| {
+                    scroll_handle.scroll_to_item(new_id);
+                    // Also try to scroll to end to ensure new tab is fully visible
+                    let max_offset = scroll_handle.max_offset();
+                    if max_offset.width > gpui::px(0.) {
+                        scroll_handle.set_offset(gpui::point(-max_offset.width, gpui::px(0.)));
+                    }
+                });
 
                 if let Some(pending_id) = self.pending_tab_removal.take() {
                     // Now that we have more than one tab, try removing the deferred one.
