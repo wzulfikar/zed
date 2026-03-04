@@ -497,21 +497,21 @@ impl ActiveView {
 }
 
 pub struct AgentPanel {
-    workspace: WeakEntity<Workspace>,
+    pub(crate) workspace: WeakEntity<Workspace>,
     /// Workspace id is used as a database key
     workspace_id: Option<WorkspaceId>,
     user_store: Entity<UserStore>,
     pub(crate) project: Entity<Project>,
-    fs: Arc<dyn Fs>,
-    language_registry: Arc<LanguageRegistry>,
+    pub(crate) fs: Arc<dyn Fs>,
+    pub(crate) language_registry: Arc<LanguageRegistry>,
     acp_history: Entity<ThreadHistory>,
     text_thread_history: Entity<TextThreadHistory>,
     thread_store: Entity<ThreadStore>,
     text_thread_store: Entity<assistant_text_thread::TextThreadStore>,
     prompt_store: Option<Entity<PromptStore>>,
-    context_server_registry: Entity<ContextServerRegistry>,
-    configuration: Option<Entity<AgentConfiguration>>,
-    configuration_subscription: Option<Subscription>,
+    pub(crate) context_server_registry: Entity<ContextServerRegistry>,
+    pub(crate) configuration: Option<Entity<AgentConfiguration>>,
+    pub(crate) configuration_subscription: Option<Subscription>,
     pub(crate) focus_handle: FocusHandle,
     active_view: ActiveView,
     previous_view: Option<ActiveView>,
@@ -1367,6 +1367,11 @@ impl AgentPanel {
     }
 
     pub(crate) fn open_configuration(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.tabs.is_empty() {
+            self.open_configuration_tab_overlay(window, cx);
+            return;
+        }
+
         let agent_server_store = self.project.read(cx).agent_server_store().clone();
         let context_server_store = self.project.read(cx).context_server_store();
         let fs = self.fs.clone();
@@ -1556,7 +1561,7 @@ impl AgentPanel {
         .detach_and_log_err(cx);
     }
 
-    fn handle_agent_configuration_event(
+    pub(crate) fn handle_agent_configuration_event(
         &mut self,
         _entity: &Entity<AgentConfiguration>,
         event: &AssistantConfigurationEvent,
@@ -2884,7 +2889,7 @@ impl AgentPanel {
             .when(!has_tabs, |this| this.gap_2())
             .bg(cx.theme().colors().tab_bar_background)
             .border_color(cx.theme().colors().border)
-            .when(!has_tabs, |this| this.border_b_1())
+            .when(!has_tabs || self.overlay_view.is_some(), |this| this.border_b_1())
             .child(
                 h_flex()
                     .h_full()
@@ -2924,7 +2929,7 @@ impl AgentPanel {
                     .gap(DynamicSpacing::Base02.rems(cx))
                     .pl(DynamicSpacing::Base04.rems(cx))
                     .pr(DynamicSpacing::Base06.rems(cx))
-                    .when(has_tabs, |this| {
+                    .when(has_tabs && self.overlay_view.is_none(), |this| {
                         this.border_b_1().border_color(cx.theme().colors().border)
                     })
                     .child(new_thread_menu)
