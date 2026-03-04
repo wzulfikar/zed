@@ -100,8 +100,8 @@ impl RenderOnce for LoadingLabel {
                     }
                     1 => match delta {
                         ..0.25 => label.set_text(text.clone()),
-                        ..0.5 => label.set_text(format!("{}.", text)),
-                        ..0.75 => label.set_text(format!("{}..", text)),
+                        ..0.5 => label.set_text(format!("{}.  ", text)),
+                        ..0.75 => label.set_text(format!("{}.. ", text)),
                         _ => label.set_text(format!("{}...", text)),
                     },
                     _ => {}
