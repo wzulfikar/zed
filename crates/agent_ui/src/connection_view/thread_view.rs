@@ -4402,11 +4402,9 @@ impl ThreadView {
             })
             .when_some(elapsed_label, |this, elapsed| {
                 this.child(
-                    div().relative().left(px(5.)).child(
-                        Label::new(elapsed)
-                            .size(LabelSize::Small)
-                            .color(Color::Muted),
-                    )
+                    Label::new(elapsed)
+                        .size(LabelSize::Small)
+                        .color(Color::Muted),
                 )
             })
             .when_some(turn_tokens_label, |this, tokens| {
