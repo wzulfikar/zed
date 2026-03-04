@@ -148,16 +148,13 @@ impl AgentPanel {
                 let new_id = self.tabs.len() - 1;
                 self.set_active_tab_by_id(new_id, window, cx);
 
-                // Scroll to show the new tab (at the rightmost position)
-                // Use defer to ensure layout is computed before scrolling
+                // Scroll to show the new tab. The new tab is at the rightmost position,
+                // so scroll to end to make it visible. Use defer to ensure layout is computed.
                 let scroll_handle = self.tab_bar_scroll_handle.clone();
-                window.defer(cx, move |window, cx| {
-                    scroll_handle.scroll_to_item(new_id);
-                    // Also try to scroll to end to ensure new tab is fully visible
-                    let max_offset = scroll_handle.max_offset();
-                    if max_offset.width > gpui::px(0.) {
-                        scroll_handle.set_offset(gpui::point(-max_offset.width, gpui::px(0.)));
-                    }
+                window.defer(cx, move |_window, _cx| {
+                    // Scroll to end by setting offset to a large negative value
+                    // The actual scrollable width will be clamped by the scroll area
+                    scroll_handle.set_offset(gpui::point(gpui::px(-10000.), gpui::px(0.)));
                 });
 
                 if let Some(pending_id) = self.pending_tab_removal.take() {
