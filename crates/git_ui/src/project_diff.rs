@@ -1728,7 +1728,7 @@ impl PickerDelegate for BaseBranchPickerDelegate {
         Some(
             ui::ListItem::new(ix)
                 .inset(true)
-                .selected(selected)
+                .toggle_state(selected)
                 .start_slot(Icon::new(icon).color(Color::Muted))
                 .child(
                     HighlightedLabel::new(branch.name().to_string(), positions.clone())
@@ -1910,7 +1910,7 @@ impl Render for BranchDiffToolbar {
                             .icon_position(IconPosition::Start)
                             .icon_size(IconSize::Small)
                             .icon_color(Color::Muted)
-                            .tooltip(|_, cx| Tooltip::text("Change base branch for diff", cx)),
+                            .tooltip(Tooltip::text("Change base branch for diff")),
                     )
                     .anchor(Corner::BottomLeft),
             )
