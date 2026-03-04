@@ -328,23 +328,24 @@ impl AgentPanel {
             .truncate()
             .when(!is_active, |label| label.color(Color::Muted));
 
-        TabLabelRender {
-            element: div()
-             .flex_1()
-             .min_w_0()
-             .child(label)
-             .when(is_generating, |this| {
-                 this.with_animation(
-                     "pulsating-tab-label",
-                     Animation::new(Duration::from_secs(2))
-                         .repeat()
-                         .with_easing(pulsating_between(0.4, 1.0)),
-                     |this, delta| this.opacity(delta),
-                 )
-             })
-             .into_any_element(),
-            tooltip
-        }
+        let element = if is_generating {
+            div()
+                .flex_1()
+                .min_w_0()
+                .child(label)
+                .with_animation(
+                    "pulsating-tab-label",
+                    Animation::new(Duration::from_secs(2))
+                        .repeat()
+                        .with_easing(pulsating_between(0.4, 1.0)),
+                    |this, delta| this.opacity(delta),
+                )
+                .into_any_element()
+        } else {
+            div().flex_1().min_w_0().child(label).into_any_element()
+        };
+
+        TabLabelRender { element, tooltip }
     }
 
     /// Render the agent icon for a tab. Only shows icons for external agents.
