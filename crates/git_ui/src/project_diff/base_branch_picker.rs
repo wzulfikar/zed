@@ -3,19 +3,17 @@ use std::sync::Arc;
 use agent_settings::AgentSettings;
 use editor::actions::SendReviewToAgent;
 use fuzzy::StringMatchCandidate;
+use git::repository::Branch;
 use gpui::{
     Action, App, Context, Corner, DismissEvent, Entity, EventEmitter, FocusHandle, Focusable,
     Render, SharedString, Subscription, Task, WeakEntity, Window,
 };
-use settings::Settings;
 use picker::{Picker, PickerDelegate};
-use git::repository::Branch;
-use project::{
-    git_store::{
-        Repository,
-        branch_diff::{self, DiffBase},
-    },
+use project::git_store::{
+    Repository,
+    branch_diff::{self, DiffBase},
 };
+use settings::Settings;
 use ui::{DiffStat, Divider, HighlightedLabel, PopoverMenu, Tooltip, prelude::*, vertical_divider};
 use workspace::{ToolbarItemEvent, ToolbarItemLocation, ToolbarItemView, item::ItemHandle};
 
@@ -332,7 +330,6 @@ impl Render for BranchDiffToolbar {
                     })
                     .trigger(
                         Button::new("base-branch-button", base_ref)
-                            .style(ButtonStyle::Filled)
                             .icon(IconName::GitBranchAlt)
                             .icon_position(IconPosition::Start)
                             .icon_size(IconSize::Small)
