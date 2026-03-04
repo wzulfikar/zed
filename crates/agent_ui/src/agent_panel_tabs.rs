@@ -327,7 +327,7 @@ impl AgentPanel {
         let (display_text, tooltip) = Self::display_tab_label(title, is_active);
 
         let label = Label::new(display_text)
-            .size(LabelSize::Small)
+            .size(LabelSize::Default)
             .truncate()
             .when(!is_active, |label| label.color(Color::Muted));
 
