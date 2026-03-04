@@ -41,10 +41,11 @@
   "lsp": {
     "rust-analyzer": {
       "initialization_options": {
-        "check": { "workspace": false },
         "procMacro": {
           "processes": 4,
         },
+        "check": { "workspace": false },
+        "rust": { "analyzerTargetDir": true },
       },
     },
   },
