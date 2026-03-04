@@ -313,21 +313,39 @@ impl AgentPanel {
             ActiveView::Uninitialized => "Loading…".into(),
         };
 
+        let is_generating = match view {
+            ActiveView::AgentThread { server_view } => server_view.read(cx).is_generating(cx),
+            ActiveView::TextThread {
+                text_thread_editor, ..
+            } => text_thread_editor.read(cx).text_thread().read(cx).is_generating(),
+            _ => false,
+        };
+
         let (display_text, tooltip) = Self::display_tab_label(title, is_active);
 
-        TabLabelRender {
-            element: div()
+        let label = Label::new(display_text)
+            .size(LabelSize::Small)
+            .truncate()
+            .when(!is_active, |label| label.color(Color::Muted));
+
+        let element = if is_generating {
+            div()
                 .flex_1()
                 .min_w_0()
-                .child(
-                    Label::new(display_text)
-                        .size(LabelSize::Small)
-                        .truncate()
-                        .when(!is_active, |label| label.color(Color::Muted)),
+                .child(label)
+                .with_animation(
+                    "pulsating-tab-label",
+                    Animation::new(Duration::from_secs(2))
+                        .repeat()
+                        .with_easing(pulsating_between(0.4, 1.0)),
+                    |this, delta| this.opacity(delta),
                 )
-                .into_any_element(),
-            tooltip,
-        }
+                .into_any_element()
+        } else {
+            div().flex_1().min_w_0().child(label).into_any_element()
+        };
+
+        TabLabelRender { element, tooltip }
     }
 
     /// Render the agent icon for a tab. Only shows icons for external agents.
