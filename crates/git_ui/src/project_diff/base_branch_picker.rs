@@ -1,12 +1,5 @@
 use std::sync::Arc;
 
-pub(super) fn format_branch_name(base_ref: &str) -> &str {
-    base_ref
-        .strip_prefix("refs/heads/")
-        .or_else(|| base_ref.strip_prefix("refs/remotes/"))
-        .unwrap_or(base_ref)
-}
-
 use agent_settings::AgentSettings;
 use editor::actions::SendReviewToAgent;
 use fuzzy::StringMatchCandidate;
@@ -25,6 +18,13 @@ use ui::{DiffStat, Divider, HighlightedLabel, PopoverMenu, Tooltip, prelude::*, 
 use workspace::{ToolbarItemEvent, ToolbarItemLocation, ToolbarItemView, item::ItemHandle};
 
 use super::{ProjectDiff, ReviewDiff, render_send_review_to_agent_button};
+
+pub(super) fn format_branch_name(base_ref: &str) -> &str {
+    base_ref
+        .strip_prefix("refs/heads/")
+        .or_else(|| base_ref.strip_prefix("refs/remotes/"))
+        .unwrap_or(base_ref)
+}
 
 struct BaseBranchPickerDelegate {
     branch_diff: WeakEntity<branch_diff::BranchDiff>,
