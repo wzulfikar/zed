@@ -4,9 +4,10 @@ use agent_settings::AgentSettings;
 use editor::actions::SendReviewToAgent;
 use fuzzy::StringMatchCandidate;
 use gpui::{
-    Action, App, Context, DismissEvent, Entity, EventEmitter, FocusHandle, Focusable, Render,
-    SharedString, Subscription, Task, WeakEntity, Window,
+    Action, App, Context, Corner, DismissEvent, Entity, EventEmitter, FocusHandle, Focusable,
+    Render, SharedString, Subscription, Task, WeakEntity, Window,
 };
+use settings::Settings;
 use picker::{Picker, PickerDelegate};
 use git::repository::Branch;
 use project::{
