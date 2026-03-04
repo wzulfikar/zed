@@ -78,7 +78,10 @@ impl AgentPanel {
             ActiveView::TextThread {
                 text_thread_editor, ..
             } => Some(text_thread_editor.focus_handle(cx)),
-            ActiveView::AgentThread { server_view, .. } => Some(server_view.focus_handle(cx)),
+            ActiveView::AgentThread { server_view, .. } => server_view
+                .read(cx)
+                .active_thread()
+                .map(|thread| thread.read(cx).active_editor(cx).focus_handle(cx)),
             _ => None,
         };
 

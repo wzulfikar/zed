@@ -309,6 +309,17 @@ pub struct ConnectionView {
     notification_subscriptions: HashMap<WindowHandle<AgentNotification>, Vec<Subscription>>,
     auth_task: Option<Task<()>>,
     _subscriptions: Vec<Subscription>,
+    /// Editor shown while the agent connection is loading. When the
+    /// connection completes this same entity is handed to ThreadView so
+    /// the user's in-progress text is preserved seamlessly.
+    pre_load_editor: Entity<MessageEditor>,
+    /// Initial content forwarded to ThreadView on connection (e.g.
+    /// ThreadSummary for resume, or ContentBlock with auto_submit).
+    pending_initial_content: Option<AgentInitialContent>,
+    /// Whether the user has queued a message during loading.
+    pre_load_editor_queued: bool,
+    /// The text content when the message was queued (to detect changes).
+    pre_load_editor_queued_text: Option<String>,
 }
 
 impl ConnectionView {
@@ -470,7 +481,7 @@ impl ConnectionView {
         cx: &mut Context<Self>,
     ) -> Self {
         let agent_server_store = project.read(cx).agent_server_store().clone();
-        let subscriptions = vec![
+        let mut subscriptions = vec![
             cx.observe_global_in::<SettingsStore>(window, Self::agent_ui_font_size_changed),
             cx.observe_global_in::<AgentFontSize>(window, Self::agent_ui_font_size_changed),
             cx.subscribe_in(
@@ -494,6 +505,52 @@ impl ConnectionView {
         })
         .detach();
 
+        let agent_name = agent.name();
+        let agent_display_name = agent_server_store
+            .read(cx)
+            .agent_display_name(&ExternalAgentServerName(agent_name.clone()))
+            .unwrap_or_else(|| agent_name.clone());
+        let pre_load_placeholder = placeholder_text(&agent_display_name, false);
+        let pre_load_editor = cx.new(|cx| {
+            MessageEditor::new(
+                workspace.clone(),
+                project.downgrade(),
+                None,
+                history.downgrade(),
+                None,
+                Rc::new(RefCell::new(acp::PromptCapabilities::default())),
+                Rc::new(RefCell::new(vec![])),
+                agent_name,
+                &pre_load_placeholder,
+                EditorMode::AutoHeight {
+                    min_lines: AgentSettings::get_global(cx).message_editor_min_lines,
+                    max_lines: Some(AgentSettings::get_global(cx).set_message_editor_max_lines()),
+                },
+                window,
+                cx,
+            )
+        });
+
+        // Focus the pre-load editor so user can start typing immediately
+        window.defer(cx, {
+            let editor = pre_load_editor.clone();
+            move |window, cx| {
+                editor.focus_handle(cx).focus(window, cx);
+            }
+        });
+
+        if let Some(AgentInitialContent::ContentBlock { ref blocks, .. }) = initial_content {
+            pre_load_editor.update(cx, |editor, cx| {
+                editor.set_message(blocks.clone(), window, cx);
+            });
+        }
+
+        subscriptions.push(cx.subscribe_in(
+            &pre_load_editor,
+            window,
+            Self::handle_pre_load_editor_event,
+        ));
+
         Self {
             agent: agent.clone(),
             agent_server_store,
@@ -505,7 +562,6 @@ impl ConnectionView {
                 agent.clone(),
                 resume_thread,
                 project,
-                initial_content,
                 window,
                 cx,
             ),
@@ -515,6 +571,10 @@ impl ConnectionView {
             history,
             _subscriptions: subscriptions,
             focus_handle: cx.focus_handle(),
+            pre_load_editor,
+            pending_initial_content: initial_content,
+            pre_load_editor_queued: false,
+            pre_load_editor_queued_text: None,
         }
     }
 
@@ -532,11 +592,13 @@ impl ConnectionView {
             .active_thread()
             .and_then(|thread| thread.read(cx).resume_thread_metadata.clone());
 
+        self.pending_initial_content = None;
+        self.pre_load_editor_queued = false;
+        self.pre_load_editor_queued_text = None;
         let state = Self::initial_state(
             self.agent.clone(),
             resume_thread_metadata,
             self.project.clone(),
-            None,
             window,
             cx,
         );
@@ -560,7 +622,6 @@ impl ConnectionView {
         agent: Rc<dyn AgentServer>,
         resume_thread: Option<AgentSessionInfo>,
         project: Entity<Project>,
-        initial_content: Option<AgentInitialContent>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> ServerState {
@@ -708,6 +769,9 @@ impl ConnectionView {
                             conversation
                         });
 
+                        let initial_content = this.pending_initial_content.take();
+                        let pre_load_editor = this.pre_load_editor.clone();
+
                         let current = this.new_thread_view(
                             None,
                             thread,
@@ -715,6 +779,7 @@ impl ConnectionView {
                             resumed_without_history,
                             resume_thread,
                             initial_content,
+                            Some(pre_load_editor),
                             window,
                             cx,
                         );
@@ -793,6 +858,7 @@ impl ConnectionView {
         resumed_without_history: bool,
         resume_thread: Option<AgentSessionInfo>,
         initial_content: Option<AgentInitialContent>,
+        pre_existing_editor: Option<Entity<MessageEditor>>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Entity<ThreadView> {
@@ -971,6 +1037,7 @@ impl ConnectionView {
                 self.history.clone(),
                 self.prompt_store.clone(),
                 initial_content,
+                pre_existing_editor,
                 subscriptions,
                 window,
                 cx,
@@ -1057,6 +1124,36 @@ impl ConnectionView {
             cx.notify();
         })
         .ok();
+    }
+
+    fn handle_pre_load_editor_event(
+        &mut self,
+        _editor: &Entity<MessageEditor>,
+        event: &MessageEditorEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !matches!(self.server_state, ServerState::Loading(_)) {
+            return;
+        }
+        if !matches!(event, MessageEditorEvent::Send) {
+            return;
+        }
+        // Ignore if already queued
+        if self.pre_load_editor_queued {
+            return;
+        }
+
+        // Mark the message for auto-submit once the connection completes.
+        // The editor text is left in place so the same entity can be handed
+        // to ThreadView with the content already visible.
+        self.pending_initial_content = Some(AgentInitialContent::ContentBlock {
+            blocks: vec![],
+            auto_submit: true,
+        });
+        self.pre_load_editor_queued = true;
+        self.pre_load_editor_queued_text = Some(self.pre_load_editor.read(cx).text(cx).to_string());
+        cx.notify();
     }
 
     fn handle_load_error(
@@ -1648,6 +1745,7 @@ impl ConnectionView {
                     false,
                     None,
                     None,
+                    None,
                     window,
                     cx,
                 );
@@ -2019,6 +2117,88 @@ impl ConnectionView {
             .title(title)
             .description(message)
             .actions_slot(div().children(action_slot))
+            .into_any_element()
+    }
+
+    fn render_pre_load_editor(
+        &mut self,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let editor_bg_color = cx.theme().colors().editor_background;
+        let current_text = self.pre_load_editor.read(cx).text(cx).to_string();
+        let is_editor_empty = current_text.is_empty();
+
+        // Check if text changed after queuing - if so, reset queue status
+        if self.pre_load_editor_queued {
+            if let Some(ref queued_text) = self.pre_load_editor_queued_text {
+                if queued_text != &current_text {
+                    self.pre_load_editor_queued = false;
+                    self.pre_load_editor_queued_text = None;
+                }
+            }
+        }
+
+        let is_queued = self.pre_load_editor_queued;
+
+        v_flex()
+            .key_context("AcpThread")
+            .p_2()
+            .gap_2()
+            .border_t_1()
+            .border_color(cx.theme().colors().border)
+            .bg(editor_bg_color)
+            .child(
+                v_flex()
+                    .size_full()
+                    .pt_1()
+                    .child(self.pre_load_editor.clone()),
+            )
+            .child(
+                h_flex()
+                    .flex_none()
+                    .justify_between()
+                    .child(
+                        Label::new("Message will be sent once the agent is ready")
+                            .size(LabelSize::XSmall)
+                            .color(Color::Placeholder),
+                    )
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .when(is_queued, |this| {
+                                this.child(
+                                    Label::new("Queued")
+                                        .size(LabelSize::Small)
+                                        .color(Color::Muted),
+                                )
+                            })
+                            .child({
+                                let send_icon = if is_queued {
+                                    IconName::Check
+                                } else {
+                                    IconName::Send
+                                };
+                                IconButton::new("send-message", send_icon)
+                                    .style(ButtonStyle::Filled)
+                                    .map(|this| {
+                                        if is_editor_empty || is_queued {
+                                            this.disabled(true).icon_color(Color::Muted)
+                                        } else {
+                                            this.icon_color(Color::Accent)
+                                        }
+                                    })
+                                    .tooltip(move |_window, cx| {
+                                        Tooltip::for_action("Send Message", &Chat, cx)
+                                    })
+                                    .on_click(cx.listener(|this, _event, _window, cx| {
+                                        this.pre_load_editor.update(cx, |editor, cx| {
+                                            editor.send(cx);
+                                        });
+                                    }))
+                            }),
+                    ),
+            )
             .into_any_element()
     }
 
@@ -2612,7 +2792,8 @@ impl Render for ConnectionView {
             .child(match &self.server_state {
                 ServerState::Loading { .. } => v_flex()
                     .flex_1()
-                    // .child(self.render_recent_history(cx))
+                    .justify_end()
+                    .child(self.render_pre_load_editor(window, cx))
                     .into_any(),
                 ServerState::LoadError(e) => v_flex()
                     .flex_1()
