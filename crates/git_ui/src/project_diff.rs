@@ -1906,6 +1906,7 @@ impl Render for BranchDiffToolbar {
                     })
                     .trigger(
                         Button::new("base-branch-button", base_ref)
+                            .style(ButtonStyle::Filled)
                             .icon(IconName::GitBranchAlt)
                             .icon_position(IconPosition::Start)
                             .icon_size(IconSize::Small)
@@ -1933,11 +1934,6 @@ impl Render for BranchDiffToolbar {
                                 .icon_position(IconPosition::Start)
                                 .icon_size(IconSize::Small)
                                 .icon_color(Color::Muted)
-                                .key_binding(KeyBinding::for_action_in(
-                                    &ReviewDiff,
-                                    &focus_handle,
-                                    cx,
-                                ))
                                 .tooltip(move |_, cx| {
                                     Tooltip::with_meta_in(
                                         "Review Diff",

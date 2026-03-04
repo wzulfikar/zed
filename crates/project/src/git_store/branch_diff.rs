@@ -115,6 +115,7 @@ impl BranchDiff {
         self.tree_diff = None;
         self.base_commit = None;
         cx.emit(BranchDiffEvent::FileListChanged);
+        cx.notify();
         *self.update_needed.borrow_mut() = ();
     }
 
