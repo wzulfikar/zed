@@ -306,11 +306,11 @@ impl Render for BranchDiffToolbar {
             DiffBase::Merge { base_ref } => {
                 let base_ref = base_ref.clone();
                 let s: &str = &base_ref;
-                SharedString::from(
-                    s.strip_prefix("refs/heads/")
-                        .or_else(|| s.strip_prefix("refs/remotes/"))
-                        .unwrap_or(s),
-                )
+                s.strip_prefix("refs/heads/")
+                    .or_else(|| s.strip_prefix("refs/remotes/"))
+                    .unwrap_or(s)
+                    .to_string()
+                    .into()
             }
             DiffBase::Head => SharedString::new_static("HEAD"),
         };
