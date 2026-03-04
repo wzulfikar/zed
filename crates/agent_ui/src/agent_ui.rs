@@ -2,6 +2,7 @@ mod agent_configuration;
 mod agent_diff;
 mod agent_model_selector;
 mod agent_panel;
+mod agent_panel_settings;
 mod agent_panel_tabs;
 mod agent_panel_tabs_types;
 mod agent_registry_ui;

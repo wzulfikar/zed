@@ -1367,6 +1367,11 @@ impl AgentPanel {
     }
 
     pub(crate) fn open_configuration(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.tabs.is_empty() {
+            self.open_configuration_tab_overlay(window, cx);
+            return;
+        }
+
         let agent_server_store = self.project.read(cx).agent_server_store().clone();
         let context_server_store = self.project.read(cx).context_server_store();
         let fs = self.fs.clone();
