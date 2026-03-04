@@ -1239,6 +1239,11 @@ impl ConnectionView {
         matches!(self.server_state, ServerState::Loading { .. })
     }
 
+    /// Returns the eager editor shown during loading.
+    pub fn eager_editor(&self) -> &Entity<MessageEditor> {
+        &self.eager_editor
+    }
+
     pub fn is_generating(&self, cx: &App) -> bool {
         self.active_thread()
             .is_some_and(|thread| thread.read(cx).thread.read(cx).status() != ThreadStatus::Idle)

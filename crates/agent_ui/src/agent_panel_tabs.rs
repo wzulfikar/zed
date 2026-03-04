@@ -78,10 +78,17 @@ impl AgentPanel {
             ActiveView::TextThread {
                 text_thread_editor, ..
             } => Some(text_thread_editor.focus_handle(cx)),
-            ActiveView::AgentThread { server_view, .. } => server_view
-                .read(cx)
-                .active_thread()
-                .map(|thread| thread.read(cx).active_editor(cx).focus_handle(cx)),
+            ActiveView::AgentThread { server_view, .. } => {
+                let server_view = server_view.read(cx);
+                if server_view.is_loading() {
+                    // Focus eager editor when connection is still loading
+                    Some(server_view.eager_editor().focus_handle(cx))
+                } else {
+                    server_view
+                        .active_thread()
+                        .map(|thread| thread.read(cx).active_editor(cx).focus_handle(cx))
+                }
+            }
             _ => None,
         };
 
@@ -140,6 +147,15 @@ impl AgentPanel {
                 self.tabs.push(AgentPanelTab::new(new_view, agent));
                 let new_id = self.tabs.len() - 1;
                 self.set_active_tab_by_id(new_id, window, cx);
+
+                // Scroll to show the new tab. The new tab is at the rightmost position,
+                // so scroll to end to make it visible. Use defer to ensure layout is computed.
+                let scroll_handle = self.tab_bar_scroll_handle.clone();
+                window.defer(cx, move |_window, _cx| {
+                    // Scroll to end by setting offset to a large negative value
+                    // The actual scrollable width will be clamped by the scroll area
+                    scroll_handle.set_offset(gpui::point(gpui::px(-10000.), gpui::px(0.)));
+                });
 
                 if let Some(pending_id) = self.pending_tab_removal.take() {
                     // Now that we have more than one tab, try removing the deferred one.
