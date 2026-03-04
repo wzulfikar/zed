@@ -199,10 +199,13 @@ impl BaseBranchPicker {
                 let mut all_branches = task.await??;
                 all_branches.retain(|branch| !branch.is_head);
                 all_branches.sort_by_key(|branch| {
-                    branch
-                        .most_recent_commit
-                        .as_ref()
-                        .map(|c| 0 - c.commit_timestamp)
+                    (
+                        branch.is_remote(),
+                        branch
+                            .most_recent_commit
+                            .as_ref()
+                            .map(|c| 0 - c.commit_timestamp),
+                    )
                 });
                 this.update_in(cx, |this, window, cx| {
                     this.picker.update(cx, |picker, cx| {
