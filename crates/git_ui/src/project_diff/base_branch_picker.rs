@@ -303,11 +303,15 @@ impl Render for BranchDiffToolbar {
         let branch_diff = project_diff.read(cx).branch_diff.clone();
         let repo = branch_diff.read(cx).repo().cloned();
         let base_ref = match branch_diff.read(cx).diff_base() {
-            DiffBase::Merge { base_ref } => base_ref
-                .strip_prefix("refs/heads/")
-                .or_else(|| base_ref.strip_prefix("refs/remotes/"))
-                .map(SharedString::from)
-                .unwrap_or_else(|| base_ref.clone()),
+            DiffBase::Merge { base_ref } => {
+                let base_ref = base_ref.clone();
+                let s: &str = &base_ref;
+                SharedString::from(
+                    s.strip_prefix("refs/heads/")
+                        .or_else(|| s.strip_prefix("refs/remotes/"))
+                        .unwrap_or(s),
+                )
+            }
             DiffBase::Head => SharedString::new_static("HEAD"),
         };
         let branch_diff_weak = branch_diff.downgrade();
