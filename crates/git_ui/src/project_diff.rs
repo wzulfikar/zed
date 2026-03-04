@@ -1886,7 +1886,11 @@ impl Render for BranchDiffToolbar {
         let branch_diff = project_diff.read(cx).branch_diff.clone();
         let repo = branch_diff.read(cx).repo().cloned();
         let base_ref = match branch_diff.read(cx).diff_base() {
-            DiffBase::Merge { base_ref } => base_ref.clone(),
+            DiffBase::Merge { base_ref } => base_ref
+                .strip_prefix("refs/heads/")
+                .or_else(|| base_ref.strip_prefix("refs/remotes/"))
+                .map(SharedString::from)
+                .unwrap_or_else(|| base_ref.clone()),
             DiffBase::Head => SharedString::new_static("HEAD"),
         };
         let branch_diff_weak = branch_diff.downgrade();
@@ -1907,7 +1911,6 @@ impl Render for BranchDiffToolbar {
                     })
                     .trigger(
                         Button::new("base-branch-button", base_ref)
-                            .style(ButtonStyle::Subtle)
                             .icon(IconName::GitBranchAlt)
                             .icon_position(IconPosition::Start)
                             .icon_size(IconSize::Small)
@@ -1921,7 +1924,7 @@ impl Render for BranchDiffToolbar {
                     .items_center()
                     .gap_2()
                     .when(!is_multibuffer_empty, |this| {
-                        this.child(DiffStat::new(
+                        this.child(Divider::vertical()).child(DiffStat::new(
                             "branch-diff-stat",
                             additions as usize,
                             deletions as usize,
