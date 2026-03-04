@@ -17,19 +17,19 @@ use editor::{
 };
 use git::repository::DiffType;
 
+use fuzzy::StringMatchCandidate;
 use git::{
     Commit, StageAll, StageAndNext, ToggleStaged, UnstageAll, UnstageAndNext,
     repository::{Branch, RepoPath, Upstream, UpstreamTracking, UpstreamTrackingStatus},
     status::FileStatus,
 };
-use fuzzy::StringMatchCandidate;
 use gpui::{
     Action, AnyElement, App, AppContext as _, AsyncWindowContext, Corner, DismissEvent, Entity,
     EventEmitter, FocusHandle, Focusable, Render, Subscription, Task, WeakEntity, actions,
 };
-use picker::{Picker, PickerDelegate};
 use language::{Anchor, Buffer, BufferId, Capability, OffsetRangeExt};
 use multi_buffer::{MultiBuffer, PathKey};
+use picker::{Picker, PickerDelegate};
 use project::{
     Project, ProjectPath,
     git_store::{
@@ -42,7 +42,10 @@ use smol::future::yield_now;
 use std::any::{Any, TypeId};
 use std::sync::Arc;
 use theme::ActiveTheme;
-use ui::{DiffStat, Divider, HighlightedLabel, KeyBinding, PopoverMenu, Tooltip, prelude::*, vertical_divider};
+use ui::{
+    DiffStat, Divider, HighlightedLabel, KeyBinding, PopoverMenu, Tooltip, prelude::*,
+    vertical_divider,
+};
 use util::{ResultExt as _, rel_path::RelPath};
 use workspace::{
     CloseActiveItem, ItemNavHistory, SerializableItem, ToolbarItemEvent, ToolbarItemLocation,
@@ -1900,13 +1903,11 @@ impl Render for BranchDiffToolbar {
                     .menu(move |window, cx| {
                         let branch_diff_weak = branch_diff_weak.clone();
                         let repo = repo.clone();
-                        Some(cx.new(|cx| {
-                            BaseBranchPicker::new(branch_diff_weak, repo, window, cx)
-                        }))
+                        Some(cx.new(|cx| BaseBranchPicker::new(branch_diff_weak, repo, window, cx)))
                     })
                     .trigger(
                         Button::new("base-branch-button", base_ref)
-                            .style(ButtonStyle::Filled)
+                            .style(ButtonStyle::Subtle)
                             .icon(IconName::GitBranchAlt)
                             .icon_position(IconPosition::Start)
                             .icon_size(IconSize::Small)
