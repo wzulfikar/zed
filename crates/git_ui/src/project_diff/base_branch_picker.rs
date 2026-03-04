@@ -1,5 +1,12 @@
 use std::sync::Arc;
 
+pub(super) fn format_branch_name(base_ref: &str) -> &str {
+    base_ref
+        .strip_prefix("refs/heads/")
+        .or_else(|| base_ref.strip_prefix("refs/remotes/"))
+        .unwrap_or(base_ref)
+}
+
 use agent_settings::AgentSettings;
 use editor::actions::SendReviewToAgent;
 use fuzzy::StringMatchCandidate;
@@ -139,9 +146,9 @@ impl PickerDelegate for BaseBranchPickerDelegate {
     ) -> Option<Self::ListItem> {
         let (branch, positions) = self.matches.get(ix)?;
         let icon = if branch.is_remote() {
-            IconName::Screen
+            IconName::ToolWeb
         } else {
-            IconName::GitBranchAlt
+            IconName::Screen
         };
         Some(
             ui::ListItem::new(ix)
@@ -190,14 +197,12 @@ impl BaseBranchPicker {
         if let Some(task) = all_branches_task {
             cx.spawn_in(window, async move |this, cx| {
                 let mut all_branches = task.await??;
+                all_branches.retain(|branch| !branch.is_head);
                 all_branches.sort_by_key(|branch| {
-                    (
-                        !branch.is_head,
-                        branch
-                            .most_recent_commit
-                            .as_ref()
-                            .map(|c| 0 - c.commit_timestamp),
-                    )
+                    branch
+                        .most_recent_commit
+                        .as_ref()
+                        .map(|c| 0 - c.commit_timestamp)
                 });
                 this.update_in(cx, |this, window, cx| {
                     this.picker.update(cx, |picker, cx| {
@@ -301,15 +306,7 @@ impl Render for BranchDiffToolbar {
         let branch_diff = project_diff.read(cx).branch_diff.clone();
         let repo = branch_diff.read(cx).repo().cloned();
         let base_ref = match branch_diff.read(cx).diff_base() {
-            DiffBase::Merge { base_ref } => {
-                let base_ref = base_ref.clone();
-                let s: &str = &base_ref;
-                s.strip_prefix("refs/heads/")
-                    .or_else(|| s.strip_prefix("refs/remotes/"))
-                    .unwrap_or(s)
-                    .to_string()
-                    .into()
-            }
+            DiffBase::Merge { base_ref } => format_branch_name(&base_ref).to_string().into(),
             DiffBase::Head => SharedString::new_static("HEAD"),
         };
         let branch_diff_weak = branch_diff.downgrade();
