@@ -2889,7 +2889,7 @@ impl AgentPanel {
             .when(!has_tabs, |this| this.gap_2())
             .bg(cx.theme().colors().tab_bar_background)
             .border_color(cx.theme().colors().border)
-            .when(!has_tabs, |this| this.border_b_1())
+            .when(!has_tabs || self.overlay_view.is_some(), |this| this.border_b_1())
             .child(
                 h_flex()
                     .h_full()
@@ -2929,7 +2929,7 @@ impl AgentPanel {
                     .gap(DynamicSpacing::Base02.rems(cx))
                     .pl(DynamicSpacing::Base04.rems(cx))
                     .pr(DynamicSpacing::Base06.rems(cx))
-                    .when(has_tabs, |this| {
+                    .when(has_tabs && self.overlay_view.is_none(), |this| {
                         this.border_b_1().border_color(cx.theme().colors().border)
                     })
                     .child(new_thread_menu)
