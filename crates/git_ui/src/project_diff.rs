@@ -1603,8 +1603,8 @@ pub(crate) fn render_send_review_to_agent_button(
     ))
 }
 
-mod project_diff_branch_picker;
-pub use project_diff_branch_picker::BranchDiffToolbar;
+mod branch_picker;
+pub use branch_picker::BranchDiffToolbar;
 
 #[derive(IntoElement, RegisterComponent)]
 pub struct ProjectDiffEmptyState {
