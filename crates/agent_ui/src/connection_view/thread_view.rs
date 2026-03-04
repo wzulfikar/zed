@@ -300,6 +300,7 @@ impl ThreadView {
         history: Entity<ThreadHistory>,
         prompt_store: Option<Entity<PromptStore>>,
         initial_content: Option<AgentInitialContent>,
+        pre_existing_editor: Option<Entity<MessageEditor>>,
         mut subscriptions: Vec<Subscription>,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -314,39 +315,68 @@ impl ThreadView {
 
         let mut should_auto_submit = false;
 
-        let message_editor = cx.new(|cx| {
-            let mut editor = MessageEditor::new(
-                workspace.clone(),
-                project.clone(),
-                thread_store,
-                history.downgrade(),
-                prompt_store,
-                prompt_capabilities.clone(),
-                available_commands.clone(),
-                agent_name.clone(),
-                &placeholder,
-                editor::EditorMode::AutoHeight {
-                    min_lines: AgentSettings::get_global(cx).message_editor_min_lines,
-                    max_lines: Some(AgentSettings::get_global(cx).set_message_editor_max_lines()),
-                },
-                window,
-                cx,
-            );
-            if let Some(content) = initial_content {
+        // Reuse eager editor (shown during loading) if provided, preserving user text
+        let eager_editor_reuse = pre_existing_editor.map(|editor| {
+            editor.update(cx, |editor, cx| {
+                editor.set_command_state(
+                    prompt_capabilities.clone(),
+                    available_commands.clone(),
+                    cx,
+                );
+                editor.set_placeholder_text(&placeholder, window, cx);
+            });
+            if let Some(content) = initial_content.clone() {
                 match content {
                     AgentInitialContent::ThreadSummary(entry) => {
-                        editor.insert_thread_summary(entry, window, cx);
+                        editor.update(cx, |editor, cx| {
+                            editor.insert_thread_summary(entry, window, cx);
+                        });
                     }
-                    AgentInitialContent::ContentBlock {
-                        blocks,
-                        auto_submit,
-                    } => {
+                    AgentInitialContent::ContentBlock { auto_submit, .. } => {
                         should_auto_submit = auto_submit;
-                        editor.set_message(blocks, window, cx);
                     }
                 }
             }
             editor
+        });
+
+        let message_editor = eager_editor_reuse.unwrap_or_else(|| {
+            cx.new(|cx| {
+                let mut editor = MessageEditor::new(
+                    workspace.clone(),
+                    project.clone(),
+                    thread_store,
+                    history.downgrade(),
+                    prompt_store,
+                    prompt_capabilities.clone(),
+                    available_commands.clone(),
+                    agent_name.clone(),
+                    &placeholder,
+                    editor::EditorMode::AutoHeight {
+                        min_lines: AgentSettings::get_global(cx).message_editor_min_lines,
+                        max_lines: Some(
+                            AgentSettings::get_global(cx).set_message_editor_max_lines(),
+                        ),
+                    },
+                    window,
+                    cx,
+                );
+                if let Some(content) = initial_content {
+                    match content {
+                        AgentInitialContent::ThreadSummary(entry) => {
+                            editor.insert_thread_summary(entry, window, cx);
+                        }
+                        AgentInitialContent::ContentBlock {
+                            blocks,
+                            auto_submit,
+                        } => {
+                            should_auto_submit = auto_submit;
+                            editor.set_message(blocks, window, cx);
+                        }
+                    }
+                }
+                editor
+            })
         });
 
         let show_codex_windows_warning = cfg!(windows)
