@@ -4388,7 +4388,7 @@ impl ThreadView {
                             .child(SpinnerLabel::sand().size(LabelSize::Small)),
                     )
                     .child(
-                        div().min_w(rems(10.)).child(
+                        div().min_w(rems(8.)).child(
                             LoadingLabel::new("Awaiting Confirmation")
                                 .size(LabelSize::Small)
                                 .color(Color::Muted),
