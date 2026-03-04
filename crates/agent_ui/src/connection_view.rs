@@ -309,17 +309,17 @@ pub struct ConnectionView {
     notification_subscriptions: HashMap<WindowHandle<AgentNotification>, Vec<Subscription>>,
     auth_task: Option<Task<()>>,
     _subscriptions: Vec<Subscription>,
-    /// Editor shown while the agent connection is loading. When the
-    /// connection completes this same entity is handed to ThreadView so
-    /// the user's in-progress text is preserved seamlessly.
-    pre_load_editor: Entity<MessageEditor>,
+    /// Editor shown while the agent connection is loading ("eager" editor).
+    /// When the connection completes this same entity is handed to ThreadView
+    /// so the user's in-progress text is preserved seamlessly.
+    eager_editor: Entity<MessageEditor>,
     /// Initial content forwarded to ThreadView on connection (e.g.
     /// ThreadSummary for resume, or ContentBlock with auto_submit).
     pending_initial_content: Option<AgentInitialContent>,
-    /// Whether the user has queued a message during loading.
-    pre_load_editor_queued: bool,
+    /// Whether the user has queued a message in the eager editor.
+    eager_editor_queued: bool,
     /// The text content when the message was queued (to detect changes).
-    pre_load_editor_queued_text: Option<String>,
+    eager_editor_queued_text: Option<String>,
 }
 
 impl ConnectionView {
@@ -510,8 +510,7 @@ impl ConnectionView {
             .read(cx)
             .agent_display_name(&ExternalAgentServerName(agent_name.clone()))
             .unwrap_or_else(|| agent_name.clone());
-        let pre_load_placeholder = placeholder_text(&agent_display_name, false);
-        let pre_load_editor = cx.new(|cx| {
+        let eager_editor = cx.new(|cx| {
             MessageEditor::new(
                 workspace.clone(),
                 project.downgrade(),
@@ -521,7 +520,7 @@ impl ConnectionView {
                 Rc::new(RefCell::new(acp::PromptCapabilities::default())),
                 Rc::new(RefCell::new(vec![])),
                 agent_name,
-                &pre_load_placeholder,
+                &placeholder_text(&agent_display_name, false),
                 EditorMode::AutoHeight {
                     min_lines: AgentSettings::get_global(cx).message_editor_min_lines,
                     max_lines: Some(AgentSettings::get_global(cx).set_message_editor_max_lines()),
@@ -533,22 +532,22 @@ impl ConnectionView {
 
         // Focus the pre-load editor so user can start typing immediately
         window.defer(cx, {
-            let editor = pre_load_editor.clone();
+            let editor = eager_editor.clone();
             move |window, cx| {
                 editor.focus_handle(cx).focus(window, cx);
             }
         });
 
         if let Some(AgentInitialContent::ContentBlock { ref blocks, .. }) = initial_content {
-            pre_load_editor.update(cx, |editor, cx| {
+            eager_editor.update(cx, |editor, cx| {
                 editor.set_message(blocks.clone(), window, cx);
             });
         }
 
         subscriptions.push(cx.subscribe_in(
-            &pre_load_editor,
+            &eager_editor,
             window,
-            Self::handle_pre_load_editor_event,
+            Self::handle_eager_editor_event,
         ));
 
         Self {
@@ -571,10 +570,10 @@ impl ConnectionView {
             history,
             _subscriptions: subscriptions,
             focus_handle: cx.focus_handle(),
-            pre_load_editor,
+            eager_editor,
             pending_initial_content: initial_content,
-            pre_load_editor_queued: false,
-            pre_load_editor_queued_text: None,
+            eager_editor_queued: false,
+            eager_editor_queued_text: None,
         }
     }
 
@@ -593,8 +592,8 @@ impl ConnectionView {
             .and_then(|thread| thread.read(cx).resume_thread_metadata.clone());
 
         self.pending_initial_content = None;
-        self.pre_load_editor_queued = false;
-        self.pre_load_editor_queued_text = None;
+        self.eager_editor_queued = false;
+        self.eager_editor_queued_text = None;
         let state = Self::initial_state(
             self.agent.clone(),
             resume_thread_metadata,
@@ -770,7 +769,7 @@ impl ConnectionView {
                         });
 
                         let initial_content = this.pending_initial_content.take();
-                        let pre_load_editor = this.pre_load_editor.clone();
+                        let eager_editor = this.eager_editor.clone();
 
                         let current = this.new_thread_view(
                             None,
@@ -779,7 +778,7 @@ impl ConnectionView {
                             resumed_without_history,
                             resume_thread,
                             initial_content,
-                            Some(pre_load_editor),
+                            Some(eager_editor),
                             window,
                             cx,
                         );
@@ -1126,7 +1125,7 @@ impl ConnectionView {
         .ok();
     }
 
-    fn handle_pre_load_editor_event(
+    fn handle_eager_editor_event(
         &mut self,
         _editor: &Entity<MessageEditor>,
         event: &MessageEditorEvent,
@@ -1140,7 +1139,7 @@ impl ConnectionView {
             return;
         }
         // Ignore if already queued
-        if self.pre_load_editor_queued {
+        if self.eager_editor_queued {
             return;
         }
 
@@ -1151,8 +1150,8 @@ impl ConnectionView {
             blocks: vec![],
             auto_submit: true,
         });
-        self.pre_load_editor_queued = true;
-        self.pre_load_editor_queued_text = Some(self.pre_load_editor.read(cx).text(cx).to_string());
+        self.eager_editor_queued = true;
+        self.eager_editor_queued_text = Some(self.eager_editor.read(cx).text(cx).to_string());
         cx.notify();
     }
 
@@ -2120,26 +2119,26 @@ impl ConnectionView {
             .into_any_element()
     }
 
-    fn render_pre_load_editor(
+    fn render_eager_editor(
         &mut self,
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let editor_bg_color = cx.theme().colors().editor_background;
-        let current_text = self.pre_load_editor.read(cx).text(cx).to_string();
+        let current_text = self.eager_editor.read(cx).text(cx).to_string();
         let is_editor_empty = current_text.is_empty();
 
         // Check if text changed after queuing - if so, reset queue status
-        if self.pre_load_editor_queued {
-            if let Some(ref queued_text) = self.pre_load_editor_queued_text {
+        if self.eager_editor_queued {
+            if let Some(ref queued_text) = self.eager_editor_queued_text {
                 if queued_text != &current_text {
-                    self.pre_load_editor_queued = false;
-                    self.pre_load_editor_queued_text = None;
+                    self.eager_editor_queued = false;
+                    self.eager_editor_queued_text = None;
                 }
             }
         }
 
-        let is_queued = self.pre_load_editor_queued;
+        let is_queued = self.eager_editor_queued;
 
         v_flex()
             .key_context("AcpThread")
@@ -2152,7 +2151,7 @@ impl ConnectionView {
                 v_flex()
                     .size_full()
                     .pt_1()
-                    .child(self.pre_load_editor.clone()),
+                    .child(self.eager_editor.clone()),
             )
             .child(
                 h_flex()
@@ -2192,7 +2191,7 @@ impl ConnectionView {
                                         Tooltip::for_action("Send Message", &Chat, cx)
                                     })
                                     .on_click(cx.listener(|this, _event, _window, cx| {
-                                        this.pre_load_editor.update(cx, |editor, cx| {
+                                        this.eager_editor.update(cx, |editor, cx| {
                                             editor.send(cx);
                                         });
                                     }))
@@ -2793,7 +2792,7 @@ impl Render for ConnectionView {
                 ServerState::Loading { .. } => v_flex()
                     .flex_1()
                     .justify_end()
-                    .child(self.render_pre_load_editor(window, cx))
+                    .child(self.render_eager_editor(window, cx))
                     .into_any(),
                 ServerState::LoadError(e) => v_flex()
                     .flex_1()

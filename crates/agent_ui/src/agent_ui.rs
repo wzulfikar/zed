@@ -225,6 +225,7 @@ impl ExternalAgent {
 }
 
 /// Content to initialize new external agent with.
+#[derive(Clone)]
 pub enum AgentInitialContent {
     ThreadSummary(acp_thread::AgentSessionInfo),
     ContentBlock {

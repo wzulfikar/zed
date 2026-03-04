@@ -315,9 +315,8 @@ impl ThreadView {
 
         let mut should_auto_submit = false;
 
-        let message_editor = if let Some(editor) = pre_existing_editor {
-            // Reuse the editor that was shown during the loading state so
-            // any text the user typed is preserved seamlessly.
+        // Reuse eager editor (shown during loading) if provided, preserving user text
+        let eager_editor_reuse = pre_existing_editor.map(|editor| {
             editor.update(cx, |editor, cx| {
                 editor.set_command_state(
                     prompt_capabilities.clone(),
@@ -326,7 +325,7 @@ impl ThreadView {
                 );
                 editor.set_placeholder_text(&placeholder, window, cx);
             });
-            if let Some(content) = initial_content {
+            if let Some(content) = initial_content.clone() {
                 match content {
                     AgentInitialContent::ThreadSummary(entry) => {
                         editor.update(cx, |editor, cx| {
@@ -334,15 +333,14 @@ impl ThreadView {
                         });
                     }
                     AgentInitialContent::ContentBlock { auto_submit, .. } => {
-                        // The editor already contains the text (pre-filled
-                        // in ConnectionView::new or typed by the user during
-                        // loading), so we only honour the auto_submit flag.
                         should_auto_submit = auto_submit;
                     }
                 }
             }
             editor
-        } else {
+        });
+
+        let message_editor = eager_editor_reuse.unwrap_or_else(|| {
             cx.new(|cx| {
                 let mut editor = MessageEditor::new(
                     workspace.clone(),
@@ -379,7 +377,7 @@ impl ThreadView {
                 }
                 editor
             })
-        };
+        });
 
         let show_codex_windows_warning = cfg!(windows)
             && project.upgrade().is_some_and(|p| p.read(cx).is_local())
