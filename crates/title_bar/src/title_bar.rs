@@ -688,9 +688,9 @@ impl TitleBar {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        if !cx.has_flag::<AgentV2FeatureFlag>() || DisableAiSettings::get_global(cx).disable_ai {
-            return None;
-        }
+        // if !cx.has_flag::<AgentV2FeatureFlag>() || DisableAiSettings::get_global(cx).disable_ai {
+        //     return None;
+        // }
 
         let is_sidebar_open = self.platform_titlebar.read(cx).is_workspace_sidebar_open();
 
