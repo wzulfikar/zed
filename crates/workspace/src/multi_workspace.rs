@@ -181,8 +181,8 @@ impl MultiWorkspace {
 
     pub fn multi_workspace_enabled(&self, cx: &App) -> bool {
         // Force enable multi-workspace
-        // cx.has_flag::<AgentV2FeatureFlag>() &&
-        !DisableAiSettings::get_global(cx).disable_ai
+        // cx.has_flag::<AgentV2FeatureFlag>() && !DisableAiSettings::get_global(cx).disable_ai
+        true
     }
 
     pub fn toggle_sidebar(&mut self, window: &mut Window, cx: &mut Context<Self>) {
