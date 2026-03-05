@@ -1,14 +1,37 @@
 use agent_settings::AgentSettings;
-use acp_thread::AgentThreadEntry;
+use acp_thread::{AcpThread, AgentThreadEntry, ThreadStatus};
 use feature_flags::{AgentSharingFeatureFlag, FeatureFlagAppExt as _};
-use gpui::{AnyElement, Context, IntoElement as _, ListOffset, SharedString, px};
+use gpui::{AnyElement, Context, Entity, IntoElement as _, ListOffset, SharedString, px};
 use ui::{SpinnerLabel, prelude::*};
 use util::time::duration_alt_display;
 
 use super::{ThreadFeedback, ThreadView};
 
 impl ThreadView {
-    pub(super) fn render_turn_stats(
+    pub(super) fn render_thread_controls_stable(
+        &self,
+        thread: &Entity<AcpThread>,
+        needs_confirmation: bool,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let is_generating = matches!(thread.read(cx).status(), ThreadStatus::Generating);
+
+        h_flex()
+            .w_full()
+            .py_2()
+            .px_4()
+            .gap_px()
+            .opacity(0.6)
+            .hover(|s| s.opacity(1.))
+            .justify_between()
+            .child(self.render_turn_stats(is_generating, needs_confirmation, cx))
+            .when(!needs_confirmation && !is_generating, |this| {
+                this.child(self.render_thread_actions(cx))
+            })
+            .into_any_element()
+    }
+
+    fn render_turn_stats(
         &self,
         is_generating: bool,
         needs_confirmation: bool,
@@ -119,7 +142,7 @@ impl ThreadView {
             .into_any_element()
     }
 
-    pub(super) fn render_thread_actions(&self, cx: &Context<Self>) -> AnyElement {
+    fn render_thread_actions(&self, cx: &Context<Self>) -> AnyElement {
         let mut thread_actions = h_flex();
 
         let open_as_markdown = IconButton::new("open-as-markdown", IconName::FileMarkdown)
