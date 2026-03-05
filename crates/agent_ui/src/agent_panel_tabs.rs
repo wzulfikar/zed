@@ -19,7 +19,7 @@ use editor;
 use menu;
 use project::ExternalAgentServerName;
 
-use crate::agent_panel::{ActiveView, AgentPanel, AgentType};
+use crate::agent_panel::{ActiveView, AgentPanel, AgentPanelEvent, AgentType};
 use crate::agent_panel_tabs_types::{AgentPanelTab, AgentPanelTabIdentity, TabId, TabLabelRender};
 
 // ============== Tab Management Methods ==============
@@ -109,6 +109,8 @@ impl AgentPanel {
         } else {
             self.focus_handle.focus(window, cx);
         }
+
+        self.sync_active_view_to_tab(new_id, window, cx);
     }
 
     /// Set an overlay view (like History or Configuration)
@@ -189,6 +191,17 @@ impl AgentPanel {
         }
 
         if self.tabs.get(id).is_some() {
+            let removed_agent_entity = match self.tabs[id].view() {
+                ActiveView::AgentThread { server_view } => Some(server_view.entity_id()),
+                _ => None,
+            };
+            let removed_text_entity = match self.tabs[id].view() {
+                ActiveView::TextThread {
+                    text_thread_editor, ..
+                } => Some(text_thread_editor.entity_id()),
+                _ => None,
+            };
+
             let removed_id = id;
             self.tabs.remove(removed_id);
             let new_id = if self.active_tab_id == removed_id {
@@ -208,8 +221,24 @@ impl AgentPanel {
                 }
             }
 
+            if let Some(entity_id) = removed_agent_entity {
+                if matches!(&self.previous_view,
+                    Some(ActiveView::AgentThread { server_view }) if server_view.entity_id() == entity_id)
+                {
+                    self.previous_view = None;
+                }
+            }
+            if let Some(entity_id) = removed_text_entity {
+                if matches!(&self.previous_view,
+                    Some(ActiveView::TextThread { text_thread_editor, .. }) if text_thread_editor.entity_id() == entity_id)
+                {
+                    self.previous_view = None;
+                }
+            }
+
             if new_id == self.active_tab_id {
                 self.tab_bar_scroll_handle.scroll_to_item(new_id);
+                self.sync_active_view_to_tab(new_id, window, cx);
             } else {
                 self.set_active_tab_by_id(new_id, window, cx);
             }
@@ -267,6 +296,55 @@ impl AgentPanel {
     /// Check if title editor is active for a tab
     pub fn is_title_editor_active_for_tab(&self, tab_id: TabId) -> bool {
         self.title_edit_overlay_tab_id == Some(tab_id)
+    }
+
+    /// Sync `active_view` and its subscriptions to match the given tab's view,
+    /// without calling `push_tab` (unlike `set_active_view`).
+    pub(crate) fn sync_active_view_to_tab(
+        &mut self,
+        tab_id: TabId,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(tab) = self.tabs.get(tab_id) else {
+            return;
+        };
+        match tab.view() {
+            ActiveView::AgentThread { server_view } => {
+                self.active_view = ActiveView::AgentThread {
+                    server_view: server_view.clone(),
+                };
+                self._thread_view_subscription =
+                    Self::subscribe_to_active_thread_view(server_view, window, cx);
+                self._active_view_observation = Some(cx.observe_in(
+                    server_view,
+                    window,
+                    |this, server_view, window, cx| {
+                        this._thread_view_subscription =
+                            Self::subscribe_to_active_thread_view(&server_view, window, cx);
+                        cx.emit(AgentPanelEvent::ActiveViewChanged);
+                        this.serialize(cx);
+                        cx.notify();
+                    },
+                ));
+            }
+            ActiveView::TextThread {
+                text_thread_editor,
+                title_editor,
+                buffer_search_bar,
+                ..
+            } => {
+                self.active_view = ActiveView::TextThread {
+                    text_thread_editor: text_thread_editor.clone(),
+                    title_editor: title_editor.clone(),
+                    buffer_search_bar: buffer_search_bar.clone(),
+                    _subscriptions: Vec::new(),
+                };
+                self._active_view_observation = None;
+                self._thread_view_subscription = None;
+            }
+            _ => {}
+        }
     }
 }
 
