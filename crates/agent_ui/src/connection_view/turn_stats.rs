@@ -1,8 +1,9 @@
 use agent_settings::AgentSettings;
 use acp_thread::{AcpThread, AgentThreadEntry, ThreadStatus};
 use feature_flags::{AgentSharingFeatureFlag, FeatureFlagAppExt as _};
-use gpui::{AnyElement, Context, Entity, IntoElement as _, ListOffset, SharedString, px};
-use ui::{SpinnerLabel, prelude::*};
+use gpui::{AnyElement, Context, Entity, Focusable as _, IntoElement as _, ListOffset, SharedString, px};
+use settings::Settings as _;
+use ui::{SpinnerLabel, Tooltip, prelude::*};
 use util::time::duration_alt_display;
 
 use super::{ThreadFeedback, ThreadView};

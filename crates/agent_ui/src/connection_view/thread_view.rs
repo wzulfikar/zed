@@ -12,7 +12,7 @@ use workspace::SERIALIZATION_THROTTLE_TIME;
 use super::*;
 
 #[derive(Default)]
-struct ThreadFeedbackState {
+pub(crate) struct ThreadFeedbackState {
     pub(crate) feedback: Option<ThreadFeedback>,
     comments_editor: Option<Entity<Editor>>,
 }
@@ -1694,7 +1694,7 @@ impl ThreadView {
 
     // thread stuff
 
-    fn share_thread(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn share_thread(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         let Some((thread, project)) = self.as_native_thread(cx).zip(self.project.upgrade()) else {
             return;
         };
