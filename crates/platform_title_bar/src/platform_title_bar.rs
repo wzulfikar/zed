@@ -97,7 +97,9 @@ impl PlatformTitleBar {
     }
 
     pub fn is_multi_workspace_enabled(cx: &App) -> bool {
-        cx.has_flag::<AgentV2FeatureFlag>() && !DisableAiSettings::get_global(cx).disable_ai
+        // Force-enable multi-workspace
+        // cx.has_flag::<AgentV2FeatureFlag>() &&
+        !DisableAiSettings::get_global(cx).disable_ai
     }
 }
 
