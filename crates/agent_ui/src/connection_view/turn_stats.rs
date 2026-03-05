@@ -58,7 +58,7 @@ impl ThreadView {
             return leading_icon.into_any_element();
         }
 
-        leading_icon = leading_icon.child(
+        leading_icon = leading_icon.when(!is_generating, |this| this.child(
             IconButton::new("edit-message", IconName::Undo)
                 .icon_size(IconSize::XSmall)
                 .icon_color(Color::Muted)
@@ -85,7 +85,7 @@ impl ThreadView {
                         }
                     }
                 })),
-        );
+        ));
 
         let elapsed_label = if is_generating {
             self.turn_fields
