@@ -338,7 +338,7 @@ upload_debug_symbols
 
 TARGET_BASE_DIR=target/${target_triple}
 if [ -n "${CARGO_TARGET_DIR:-}" ]; then
-    TARGET_BASE_DIR="${CARGO_TARGET_DIR}/${TARGET_BASE_DIR}"
+    TARGET_BASE_DIR="${CARGO_TARGET_DIR}/${target_triple}"
 fi
 
 cp "${TARGET_BASE_DIR}/${target_dir}/zed" "${app_path}/Contents/MacOS/zed"
