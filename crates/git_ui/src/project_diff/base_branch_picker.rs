@@ -200,7 +200,7 @@ impl BaseBranchPicker {
                 all_branches.retain(|branch| !branch.is_head);
                 all_branches.sort_by_key(|branch| {
                     (
-                        branch.is_remote(),
+                        !branch.is_remote(),
                         branch
                             .most_recent_commit
                             .as_ref()

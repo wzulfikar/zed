@@ -1,4 +1,5 @@
 use std::{
+    any::TypeId,
     ops::{Bound, Range, RangeInclusive},
     sync::Arc,
 };
@@ -6,7 +7,7 @@ use std::{
 use buffer_diff::{BufferDiff, BufferDiffSnapshot};
 use collections::HashMap;
 
-use gpui::{Action, AppContext as _, Entity, EventEmitter, Focusable, Subscription, WeakEntity};
+use gpui::{Action, AnyEntity, AppContext as _, Entity, EventEmitter, Focusable, Subscription, WeakEntity};
 use itertools::Itertools;
 use language::{Buffer, Capability};
 use multi_buffer::{
@@ -1743,6 +1744,21 @@ impl Item for SplittableEditor {
         f: &mut dyn FnMut(gpui::EntityId, &dyn project::ProjectItem),
     ) {
         self.rhs_editor.read(cx).for_each_project_item(cx, f)
+    }
+
+    fn act_as_type<'a>(
+        &'a self,
+        type_id: TypeId,
+        self_handle: &'a Entity<Self>,
+        _: &'a App,
+    ) -> Option<AnyEntity> {
+        if type_id == TypeId::of::<Self>() {
+            Some(self_handle.clone().into())
+        } else if type_id == TypeId::of::<Editor>() {
+            Some(self.rhs_editor.clone().into())
+        } else {
+            None
+        }
     }
 
     fn buffer_kind(&self, cx: &App) -> ItemBufferKind {
