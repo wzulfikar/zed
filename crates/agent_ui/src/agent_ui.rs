@@ -6,6 +6,7 @@ mod agent_panel_settings;
 mod agent_panel_tabs;
 mod agent_panel_tabs_types;
 mod agent_registry_ui;
+mod branch_names;
 mod buffer_codegen;
 mod completion_provider;
 mod config_options;
