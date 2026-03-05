@@ -281,6 +281,7 @@ pub struct TurnFields {
     pub _turn_timer_task: Option<Task<()>>,
     pub last_turn_duration: Option<Duration>,
     pub last_turn_tokens: Option<u64>,
+    pub thread_duration: Duration,
     pub turn_generation: usize,
     pub turn_started_at: Option<Instant>,
     pub turn_tokens: Option<u64>,
@@ -794,11 +795,17 @@ impl ThreadView {
         if self.turn_fields.turn_generation != generation {
             return;
         }
-        self.turn_fields.last_turn_duration = self
+        let turn_duration = self
             .turn_fields
             .turn_started_at
             .take()
             .map(|started| started.elapsed());
+        self.turn_fields.last_turn_duration = turn_duration;
+        self.turn_fields.thread_duration = self
+            .turn_fields
+            .thread_duration
+            .checked_add(turn_duration.unwrap_or(Duration::ZERO))
+            .unwrap_or(self.turn_fields.thread_duration);
         self.turn_fields.last_turn_tokens = self.turn_fields.turn_tokens.take();
         self.turn_fields._turn_timer_task = None;
     }
@@ -2771,6 +2778,20 @@ impl ThreadView {
                             .gap_0p5()
                             .child(self.render_add_context_button(cx))
                             .child(self.render_follow_toggle(cx))
+                            .when(
+                                self.turn_fields.thread_duration > Duration::ZERO,
+                                |this| {
+                                    this.child(
+                                        h_flex().pl_2().child(
+                                            Label::new(duration_alt_display(
+                                                self.turn_fields.thread_duration,
+                                            ))
+                                            .size(LabelSize::Small)
+                                            .color(Color::Muted),
+                                        ),
+                                    )
+                                },
+                            )
                             .children(self.render_fast_mode_control(cx))
                             .children(self.render_thinking_control(cx)),
                     )
