@@ -553,9 +553,9 @@ pub struct AgentPanel {
     pub(crate) configuration: Option<Entity<AgentConfiguration>>,
     pub(crate) configuration_subscription: Option<Subscription>,
     pub(crate) focus_handle: FocusHandle,
-    active_view: ActiveView,
-    previous_view: Option<ActiveView>,
-    _active_view_observation: Option<Subscription>,
+    pub(crate) active_view: ActiveView,
+    pub(crate) previous_view: Option<ActiveView>,
+    pub(crate) _active_view_observation: Option<Subscription>,
     new_thread_menu_handle: PopoverMenuHandle<ContextMenu>,
     start_thread_in_menu_handle: PopoverMenuHandle<ContextMenu>,
     agent_panel_menu_handle: PopoverMenuHandle<ContextMenu>,
@@ -570,7 +570,7 @@ pub struct AgentPanel {
     pub(crate) selected_agent: AgentType,
     start_thread_in: StartThreadIn,
     worktree_creation_status: Option<WorktreeCreationStatus>,
-    _thread_view_subscription: Option<Subscription>,
+    pub(crate) _thread_view_subscription: Option<Subscription>,
     _worktree_creation_task: Option<Task<()>>,
     show_trust_workspace_message: bool,
     last_configuration_error_telemetry: Option<String>,
@@ -1947,7 +1947,7 @@ impl AgentPanel {
         self.selected_agent.clone()
     }
 
-    fn subscribe_to_active_thread_view(
+    pub(crate) fn subscribe_to_active_thread_view(
         server_view: &Entity<ConnectionView>,
         window: &mut Window,
         cx: &mut Context<Self>,
