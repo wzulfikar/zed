@@ -347,8 +347,10 @@ impl ThreadView {
                         should_auto_submit = auto_submit;
                     }
                 }
-            } else if let Some(draft) = thread.read(cx).draft_prompt() {
-                editor.set_message(draft.to_vec(), window, cx);
+            } else if let Some(draft) = thread.read(cx).draft_prompt().map(|d| d.to_vec()) {
+                editor.update(cx, |editor, cx| {
+                    editor.set_message(draft, window, cx);
+                });
             }
             editor
         });

@@ -3599,7 +3599,7 @@ impl AgentPanel {
         };
 
         let show_history_menu = self.history_kind_for_selected_agent(cx).is_some();
-        let has_v2_flag = true; // cx.has_flag::<AgentV2FeatureFlag>();
+        let has_v2_flag = cx.has_flag::<AgentV2FeatureFlag>();
 
         let has_tabs = !self.tabs.is_empty();
 
@@ -3663,7 +3663,7 @@ impl AgentPanel {
                     })
                     .when(
                         has_v2_flag
-                            // && cx.has_flag::<AgentGitWorktreesFeatureFlag>()
+                            && cx.has_flag::<AgentGitWorktreesFeatureFlag>()
                             && !self.active_thread_has_messages(cx),
                         |this| this.child(self.render_start_thread_in_selector(cx)),
                     )
