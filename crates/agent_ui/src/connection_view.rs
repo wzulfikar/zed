@@ -79,8 +79,8 @@ use crate::{
     ToggleThinkingMode, UndoLastReject,
 };
 
-const STOPWATCH_THRESHOLD: Duration = Duration::from_secs(30);
-const TOKEN_THRESHOLD: u64 = 250;
+const STOPWATCH_THRESHOLD: Duration = Duration::from_secs(0);
+const TOKEN_THRESHOLD: u64 = 0;
 
 mod thread_view;
 pub use thread_view::*;
@@ -551,11 +551,7 @@ impl ConnectionView {
             });
         }
 
-        subscriptions.push(cx.subscribe_in(
-            &eager_editor,
-            window,
-            Self::handle_eager_editor_event,
-        ));
+        subscriptions.push(cx.subscribe_in(&eager_editor, window, Self::handle_eager_editor_event));
 
         Self {
             agent: agent.clone(),
@@ -564,13 +560,7 @@ impl ConnectionView {
             project: project.clone(),
             thread_store,
             prompt_store,
-            server_state: Self::initial_state(
-                agent.clone(),
-                resume_thread,
-                project,
-                window,
-                cx,
-            ),
+            server_state: Self::initial_state(agent.clone(), resume_thread, project, window, cx),
             notifications: Vec::new(),
             notification_subscriptions: HashMap::default(),
             auth_task: None,
@@ -2136,11 +2126,7 @@ impl ConnectionView {
             .into_any_element()
     }
 
-    fn render_eager_editor(
-        &mut self,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
+    fn render_eager_editor(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let editor_bg_color = cx.theme().colors().editor_background;
         let current_text = self.eager_editor.read(cx).text(cx).to_string();
         let is_editor_empty = current_text.is_empty();
@@ -2164,12 +2150,7 @@ impl ConnectionView {
             .border_t_1()
             .border_color(cx.theme().colors().border)
             .bg(editor_bg_color)
-            .child(
-                v_flex()
-                    .size_full()
-                    .pt_1()
-                    .child(self.eager_editor.clone()),
-            )
+            .child(v_flex().size_full().pt_1().child(self.eager_editor.clone()))
             .child(
                 h_flex()
                     .flex_none()
