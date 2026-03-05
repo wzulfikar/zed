@@ -12,8 +12,8 @@ use workspace::SERIALIZATION_THROTTLE_TIME;
 use super::*;
 
 #[derive(Default)]
-struct ThreadFeedbackState {
-    feedback: Option<ThreadFeedback>,
+pub(crate) struct ThreadFeedbackState {
+    pub(crate) feedback: Option<ThreadFeedback>,
     comments_editor: Option<Entity<Editor>>,
 }
 
@@ -221,7 +221,7 @@ pub struct ThreadView {
     pub thread_error_markdown: Option<Entity<Markdown>>,
     pub token_limit_callout_dismissed: bool,
     pub last_token_limit_telemetry: Option<acp_thread::TokenUsageRatio>,
-    thread_feedback: ThreadFeedbackState,
+    pub(crate) thread_feedback: ThreadFeedbackState,
     pub list_state: ListState,
     pub prompt_capabilities: Rc<RefCell<PromptCapabilities>>,
     pub available_commands: Rc<RefCell<Vec<agent_client_protocol::AvailableCommand>>>,
@@ -1694,7 +1694,7 @@ impl ThreadView {
 
     // thread stuff
 
-    fn share_thread(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn share_thread(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         let Some((thread, project)) = self.as_native_thread(cx).zip(self.project.upgrade()) else {
             return;
         };
@@ -4109,11 +4109,7 @@ impl ThreadView {
                 .w_full()
                 .child(primary)
                 .map(|this| {
-                    if needs_confirmation {
-                        this.child(self.render_generating(true, cx))
-                    } else {
-                        this.child(self.render_thread_controls(&thread, cx))
-                    }
+                    this.child(self.render_thread_controls_stable(&thread, needs_confirmation, cx))
                 })
                 .when_some(comments_editor, |this, editor| {
                     this.child(Self::render_feedback_feedback_editor(editor, cx))
@@ -4407,7 +4403,7 @@ impl ThreadView {
         cx.notify();
     }
 
-    fn handle_feedback_click(
+    pub(crate) fn handle_feedback_click(
         &mut self,
         feedback: ThreadFeedback,
         window: &mut Window,

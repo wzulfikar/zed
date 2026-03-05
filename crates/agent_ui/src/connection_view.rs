@@ -83,6 +83,7 @@ const STOPWATCH_THRESHOLD: Duration = Duration::from_secs(0);
 const TOKEN_THRESHOLD: u64 = 0;
 
 mod thread_view;
+mod turn_stats;
 pub use thread_view::*;
 
 pub struct QueuedMessage {
